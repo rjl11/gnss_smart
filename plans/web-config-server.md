@@ -11,6 +11,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 
 ## Network mode
 - **Access point** by default (`cyw43_arch_enable_ap_mode`) with WPA2 and a fixed address (192.168.4.1). This works in the field with no router. It needs the small DHCP server from pico-examples (`pico_w/wifi/access_point/dhcpserver`), plus optionally its DNS server so any hostname resolves to the device.
+- **Over Ethernet** (later option): the same pages could also be served over the W5500 (ioLibrary has a small HTTP server), so the device can be configured from the tractor network without Wi-Fi.
 - **Station mode** (join an existing network) as an option later. It's the same mode NTRIP over Wi-Fi would need, so it can share that code.
 - SSID derived from the board's unique ID (e.g. `gnss-smart-1A2B`). Default password printed on a label or set over USB; changeable from the web page.
 
@@ -26,12 +27,14 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - Per-sensor: measured rate (IMU 800 Hz, baro 100 Hz, GNSS 20 Hz), packets received, checksum/framing errors, UART overruns, time since last sample.
 - GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset.
 - Filter: mode (aligning / navigating), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
+- Ethernet: link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233, active correction source (radio on COM2 or Ethernet on COM3).
 - CPU: core 1 worst-case and mean time per 1.25 ms IMU tick (DWT cycle counter), core 0 load, free stack/heap.
 - Optional: UM980 command passthrough (send a command, show the reply) for debugging.
 
 ## Configuration page (write)
 - Lever arms (IMU → GNSS antenna), IMU mounting rotation, filter tuning presets.
 - Output: rate, BLE device name, message format.
+- Ethernet: IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999), output sentence (`$PANDA` by default). See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
 - Sensor setup: UART baud rates, UM980 log set (re-sent at boot).
 - Wi-Fi: SSID, password, AP vs station.
 - Buttons: save, revert to defaults, reboot.

@@ -39,7 +39,7 @@ That totals roughly **5–10 % of one core**. The second core is free for parsin
 A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It does mean two firmwares, a framing protocol and a second chip to keep in sync. The same result is available on one chip:
 
 1. **Send RTCM3 straight to the UM980.** The UM980 has three identical UARTs, COM1–COM3 (Unicore N4 manual §4). Wire the radio's TX to UM980 COM2 RX and lock that port with `CONFIG RXTYPE COM2 RTCM`, so it only accepts corrections and ignores commands. No MCU UART is involved. The firmware can still watch correction age and RTK status in the UM980's PVTSLN/BESTNAV output.
-2. **Position output goes over the Pico 2 W's on-board Bluetooth**, so it needs no UART. See "Bluetooth output" below.
+2. **Position output goes over the Pico 2 W's on-board Bluetooth and a W5500 Ethernet module on SPI**, so it needs no UART. See "Bluetooth output" below and [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md) (UDP `$PANDA` for AgOpenWeb).
 3. **PIO UARTs are spare capacity.** The RP2350 has 3 PIO blocks with 12 state machines in total. The CYW43439 radio uses one state machine plus a DMA channel for its SPI link (internal pins GPIO23/24/25/29), which leaves 11. The Pico SDK's `pio_uart_tx` / `pio_uart_rx` give one UART per state machine, receiving via DMA, at speeds well beyond 921600 baud. Use them if more serial ports are needed later.
 
 | Port | Device | Direction | Baud |
@@ -47,9 +47,11 @@ A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It d
 | UART0 (hardware) | TM210 IMU | RX (+TX for config) | ≥460800 |
 | UART1 (hardware) | UM980 COM1 | RX binary logs, TX config | 460800–921600 |
 | On-board CYW43439 (BLE) | Phone / PC | position output 10 Hz | — |
+| SPI0 (GP16–21) | W5500 Ethernet | UDP `$PANDA` out 10 Hz, RTCM in | ~30 MHz SPI |
+| PIO UART TX | UM980 COM3 | RTCM from Ethernet (AgOpenWeb NTRIP) | 115200+ |
 | none (direct wire) | Radio → UM980 COM2 | RTCM3 | radio baud |
 | GPIO interrupt | UM980 PPS | time sync | — |
-| SPI or I2C | BMP581 | — | — |
+| I2C1 (e.g. GP2/GP3) | BMP581 | — | — |
 
 Notes:
 - The manual says COM1 should be kept for firmware upgrades. With COM1 on the MCU, firmware upgrades of the UM980 go through the RP2350, or use COM3 for the MCU and leave COM1 on a header.
