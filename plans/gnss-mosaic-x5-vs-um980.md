@@ -3,7 +3,7 @@
 ## Context
 The current GNSS receiver is the Unicore UM980 ([rp2350-feasibility.md](rp2350-feasibility.md), [inslib-nav-suite.md](inslib-nav-suite.md)). This plan compares it with the Septentrio mosaic-X5 and lists what a switch would change in performance and firmware. It is a comparison, not a decision.
 
-Sources: `docs/UM980_Datasheet.pdf` (R1.0, 2022-08), `docs/Mosaic-X5_Datasheet.pdf` (2020 brochure), and `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf`.
+Sources: `docs/datasheets/UM980_Datasheet.pdf` (R1.0, 2022-08), `docs/datasheets/Mosaic-X5_Datasheet.pdf` (2020 brochure), and `docs/datasheets/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf`.
 
 ## Datasheet comparison
 | | UM980 | mosaic-X5 |

@@ -3,7 +3,7 @@
 ## Context
 The current IMU is the SYD Dynamics TM210 ([imu-tm210.md](imu-tm210.md)). This plan compares it with the Analog Devices ADIS16465-2BMLZ (±500 °/s variant) and lists what a switch would change in performance and firmware. It is a comparison, not a decision.
 
-Sources: `docs/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/adis16465.pdf` (Rev. C, Table 1). The TM210 noise density is derived in [imu-tm210.md](imu-tm210.md).
+Sources: `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/datasheets/adis16465.pdf` (Rev. C, Table 1). The TM210 noise density is derived in [imu-tm210.md](imu-tm210.md).
 
 ## Datasheet comparison
 | | TM210 | ADIS16465-2 | Ratio |
