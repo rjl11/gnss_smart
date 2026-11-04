@@ -24,7 +24,7 @@ Rough CPU budget, scaling the M4F figures to an M33 at 150 MHz:
 That totals roughly **5–10 % of one core**. The second core is free for parsing and I/O. The RP2350's double-precision coprocessor makes the few double operations (lat/lon) cheaper than on the M4F reference.
 
 ## Real risks (I/O and timing, not compute)
-1. **TM210 at 800 Hz:** this is about 30–50 kB/s depending on packet format. It needs ≥460800 baud UART (or SPI), received via DMA. Check the max output rate and interface in `docs/TransducerM_TM210_Datasheet_EN_V126-R.pdf`.
+1. **TM210 at 800 Hz:** raw data only is 49 B per packet, so 39.2 kB/s. Run UART at 921600 baud (about 43 % load, the vendor's recommendation for ODR ≥400 Hz), received via DMA. Configuration and conversion: [imu-tm210.md](imu-tm210.md). How samples go into `nav_suite`: [inslib-nav-suite.md](inslib-nav-suite.md).
 2. **UM980 at 20 Hz:** use Unicore binary logs (e.g. PVTSLN/BESTNAV) at ≥460800 baud rather than heavy NMEA. Also use PPS so GNSS timestamps line up with IMU time.
 3. **Timestamping:** INSLIB tolerates measurement delay through a history buffer (`ins.h`). Every sample still needs an accurate capture timestamp, so take it in the ISR or DMA-complete handler.
 4. **Execution from flash:** the RP2350 executes code from external QSPI flash through a cache (XIP). To get deterministic timing, put the filter's hot path in SRAM (`__not_in_flash_func` / `copy_to_ram` build).
@@ -44,7 +44,7 @@ A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It d
 
 | Port | Device | Direction | Baud |
 |---|---|---|---|
-| UART0 (hardware) | TM210 IMU | RX (+TX for config) | ≥460800 |
+| UART0 (hardware) | TM210 IMU | RX raw data, TX status request | 921600 |
 | UART1 (hardware) | UM980 COM1 | RX binary logs, TX config | 460800–921600 |
 | On-board CYW43439 (BLE) | Phone / PC | position output 10 Hz | — |
 | SPI0 (GP16–21) | W5500 Ethernet | UDP `$PANDA` out 10 Hz, RTCM in | ~30 MHz SPI |

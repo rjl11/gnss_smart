@@ -4,7 +4,7 @@
 Start bare metal on the Pico SDK. Move to FreeRTOS when NTRIP over Wi-Fi or SD logging is added.
 
 ## Bare-metal layout (start here)
-- **Core 1:** only the INSLIB filter, in a plain loop fed by IMU, GNSS and barometer samples from core 0 through a queue (e.g. `pico_util/queue`). Nothing preempts it, so the 800 Hz timing stays deterministic.
+- **Core 1:** only the INSLIB filter, in a plain loop fed by IMU, GNSS and barometer samples from core 0 through a queue (e.g. `pico_util/queue`). Nothing preempts it, so the 800 Hz timing stays deterministic. How the filter is fed and read: [inslib-nav-suite.md](inslib-nav-suite.md).
 - **Core 0:** UART DMA buffers, UM980 and TM210 parsers, BMP581 driver, BLE output, and the W5500 Ethernet driver (WIZnet ioLibrary, hardware TCP/IP) with UDP `$PANDA` output and the RTCM forwarder to UM980 COM3 (see [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)). Bluetooth (BTstack) runs in the background via `pico_cyw43_arch_threadsafe_background`, with no RTOS needed.
 - INSLIB has no OS dependencies and no heap, so it works either way.
 
