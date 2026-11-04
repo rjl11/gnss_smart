@@ -1,0 +1,76 @@
+# --- Build output ---
+build/
+build-*/
+cmake-build-*/
+out/
+bin/
+obj/
+Debug/
+Release/
+
+# --- CMake ---
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+CMakeUserPresets.json
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Testing/
+_deps/
+compile_commands.json
+
+# --- Object files / libraries / executables ---
+*.o
+*.obj
+*.ko
+*.elf
+*.a
+*.lib
+*.la
+*.lo
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+*.bin
+*.hex
+*.uf2
+*.map
+*.lst
+
+# --- Precompiled headers / dependency files ---
+*.gch
+*.pch
+*.d
+*.ilk
+*.pdb
+*.idb
+
+# --- Embedded toolchains (ESP-IDF, Pico SDK, PlatformIO) ---
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+.pio/
+
+# --- Editors / IDEs ---
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+.vs/
+*.swp
+*~
+.cache/
+.clangd/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini

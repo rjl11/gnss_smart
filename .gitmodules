@@ -1,0 +1,3 @@
+[submodule "external/INSLIB"]
+	path = external/INSLIB
+	url = https://github.com/jnz/INSLIB.git
