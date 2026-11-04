@@ -1,3 +1,6 @@
 [submodule "external/INSLIB"]
 	path = external/INSLIB
 	url = https://github.com/jnz/INSLIB.git
+[submodule "external/BMP5_SensorAPI"]
+	path = external/BMP5_SensorAPI
+	url = https://github.com/boschsensortec/BMP5_SensorAPI
