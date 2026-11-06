@@ -7,8 +7,9 @@ Decisions fixed by the user:
 - The sequence starts with `FRESET`, then a 15 s wait for the reboot, then `CONFIG SIGNALGROUP 2` (all constellations), then a wait for that reboot, and it ends with `SAVECONFIG`.
 - COM1, COM2 and COM3 all run at **460800**.
 - **No port is ever locked** (`CONFIG RXTYPE` is never sent), because of the risk of bricking the receiver.
-- **Only COM1 is used.** It carries commands, binary logs out and RTCM corrections in. COM2 and COM3 are not connected; only their baud rate is set.
-  - **Exception, Zero 2 W companion only** ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)): COM2 is wired both ways to the Zero's UART. The Zero writes only CRC-checked RTCM into COM2 RX and never sends commands, so the Pico stays the only device that configures the receiver. COM2 TX carries `GPRMC COM2 1` and `GPZDA COM2 1`, which the Pico enables after the `UNLOG`s, for the Zero's NTP server. RTCM then enters COM2, not COM1. COM2 stays `AUTO`; no `RXTYPE` lock.
+- **The Pico uses only COM2.** It carries commands, binary logs out and RTCM corrections in. COM1 is the module's USB-C port, left free for a PC (UPrecise, receiver firmware upgrades). COM3 is not connected. Only their baud rate is set.
+- **Hardware:** Both receivers are **ready-made modules**, not bare LGA parts. Each module exposes: a USB-C port that is **COM1** (for a PC), COM2 RX/TX, COM3 RX/TX, PPS, 5 V and GND. The Pico's UART1 goes to the COM2 pins.
+  - **Exception, Zero 2 W companion only** ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)): COM3 is wired both ways to the Zero's UART. The Zero writes only CRC-checked RTCM into COM3 RX and never sends commands, so the Pico stays the only device that configures the receiver. COM3 TX carries `GPRMC COM3 1` and `GPZDA COM3 1`, which the Pico enables after the `UNLOG`s, for the Zero's NTP server. RTCM then enters COM3, not COM2. COM3 stays `AUTO`; no `RXTYPE` lock.
 
 Sources: `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf` (section numbers below refer to it) and `docs/datasheets/UM980_Datasheet.pdf`.
 
@@ -23,7 +24,7 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
   - Only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`), but check on the bench that SG 2 really delivers it.
 - **RTCM on the command port:**
   - In rover mode the receiver identifies RTCM input by itself (§3.1).
-  - The default port type is `RXTYPE AUTO` (§4.3), so COM1 accepts commands and RTCM together.
+  - The default port type is `RXTYPE AUTO` (§4.3), so COM2 accepts commands and RTCM together.
   - `FRESET` returns a used receiver that has a locked port to AUTO.
 - **No command checksum on the UM980:** `CONFIG CMDFORMAT` isn't listed for it (§4.12). Commands are plain ASCII ending in CRLF.
 - **Read-only checks:**
@@ -42,8 +43,8 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 | Doppler prediction | `CONFIG PSRVELDRPOS DISABLE` | No fake fixes into INSLIB, which does its own prediction |
 | PPS | `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0` | 1 Hz, rising edge, 100 ms wide. `ENABLE` outputs PPS only once time has converged, so there are no edges before time is valid (§4.32) |
 | Port locks | none: `CONFIG RXTYPE` is never sent | Risk of bricking. All ports stay at the default AUTO |
-| Baud | `CONFIG COM1 460800`, `CONFIG COM2 460800`, `CONFIG COM3 460800` | COM2/COM3 aren't connected, but a PC tool on a header finds them at a known rate |
-| Logs | `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, then `BESTNAVB COM1 0.05`, `STADOPB COM1 1` | See below |
+| Baud | `CONFIG COM1 460800`, `CONFIG COM3 460800`, `CONFIG COM2 460800` | COM2 is the Pico's port. A PC on the USB-C (COM1) or on the COM3 pins finds the receiver at a known rate. Whether the module's USB bridge cares about the COM1 baud is a bench question |
+| Logs | `UNLOG COM2`, `UNLOG COM3`, `UNLOG COM1`, then `BESTNAVB COM2 0.05`, `STADOPB COM2 1` | See below |
 
 Logs:
 - **BESTNAVB at 20 Hz** (§7.5.21) is the INSLIB input: position, velocity, per-axis σ, differential age, satellite counts and solution type.
@@ -66,9 +67,9 @@ Logs:
    1. `UNLOG` (quiets the current port), then `FRESET`. Switch UART1 to 115200.
    2. Wait **15 s**. Then send `VERSIONB` every 1 s until the receiver answers (error after 60 s).
    3. `CONFIG SIGNALGROUP 2` and wait for the OK. Wait **15 s**, then probe until the receiver answers; this works whether or not it rebooted. Send `CONFIG` and check that it shows `SIGNALGROUP 2`.
-   4. `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS DISABLE`, `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0`. Wait for each OK.
-   5. `CONFIG COM2 460800`, `CONFIG COM3 460800`, and `CONFIG COM1 460800` last. The COM1 reply is expected at the old baud (verify on the bench). After it, switch UART1 to 460800, wait 100 ms and probe with `VERSIONB`.
-   6. `BESTNAVB COM1 0.05`, `STADOPB COM1 1`.
+   4. `UNLOG COM2`, `UNLOG COM3`, `UNLOG COM1`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS DISABLE`, `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0`. Wait for each OK.
+   5. `CONFIG COM3 460800`, `CONFIG COM1 460800`, and `CONFIG COM2 460800` last. The COM2 reply is expected at the old baud (verify on the bench). After it, switch UART1 to 460800, wait 100 ms and probe with `VERSIONB`.
+   6. `BESTNAVB COM2 0.05`, `STADOPB COM2 1`.
    7. `SAVECONFIG` and wait for the OK.
    8. **Prove that it was saved:**
       - Send `RESET` and wait 15 s.
@@ -78,7 +79,7 @@ Logs:
 
 **Command helper:**
 - Writes `cmd` + CRLF and waits up to 1 s for the matching `$command,…,response: OK`. Retries 3×, and logs failures.
-- Binary logs and command replies share COM1, so the RX parser separates `$`/`#` ASCII lines from `AA 44 B5` binary frames.
+- Binary logs and command replies share COM2, so the RX parser separates `$`/`#` ASCII lines from `AA 44 B5` binary frames.
 - Every step's result goes to the diagnostics page: state, last error, receiver serial number, firmware.
 
 **`FRESET` timing.** The user specified a fixed 15 s wait after `FRESET`. After that wait, the firmware probes until the receiver answers instead of assuming it is ready.
@@ -100,15 +101,15 @@ Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)
 ## Verification (bench, when implemented)
 1. A factory-new UM980 (or one reset with `FRESET` from UPrecise) is provisioned with no user action. The log shows every step OK and the total time (40–60 s, estimate, not yet measured).
 2. Power-cycle: the fast path passes, no `FRESET` is sent, and BESTNAVB arrives at 20 Hz.
-3. Change one setting by hand (e.g. `CONFIG COM1 115200` + `SAVECONFIG`). On the next boot it is detected and re-provisioned.
-4. `CONFIG` shows SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE. `UNILOGLIST` shows only the two logs (four with the Zero 2 W companion: plus `GPRMC` and `GPZDA` on COM2).
-5. RTCM from SW Maps flows into COM1 while BESTNAVB streams:
+3. Change one setting by hand (e.g. `CONFIG COM2 115200` + `SAVECONFIG`). On the next boot it is detected and re-provisioned.
+4. `CONFIG` shows SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE. `UNILOGLIST` shows only the two logs (four with the Zero 2 W companion: plus `GPRMC` and `GPZDA` on COM3).
+5. RTCM from SW Maps flows into COM2 while BESTNAVB streams:
    - The receiver reaches RTK fixed.
    - BESTNAVB stays at 20 Hz with no CRC errors.
    - A command sent during the RTCM stream still gets its OK.
 6. A PPS edge arrives on the GPIO at 1 Hz after the fix, and none before.
 7. **Open questions to settle on the bench:**
    - The exact acknowledgement and error text.
-   - At which baud the `CONFIG COM1` reply arrives.
+   - At which baud the `CONFIG COM2` reply arrives.
    - Whether SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
    - Whether a factory-new UM980 is already at SG 2. If so, there is no reboot after `CONFIG SIGNALGROUP 2`.

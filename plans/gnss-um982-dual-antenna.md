@@ -14,7 +14,8 @@ Decisions fixed by the user:
 
 Sources:
 - `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf`. Section numbers below refer to it.
-- There is no UM982 datasheet in `docs/datasheets/` yet. Add `UM982_Datasheet.pdf` there before hardware design. Power, size, pinout and heading accuracy below are open until then.
+- `docs/datasheets/um982-user-manual-en-r1-1.pdf` (UM982 hardware manual R1.1, 2022-09). Section and table numbers marked "HW" refer to it.
+- `docs/datasheets/UM980_Datasheet.pdf`, for the comparison with the UM980.
 
 Related:
 - [gnss-um980-config.md](gnss-um980-config.md): the state machine this plan extends.
@@ -43,6 +44,11 @@ Related:
   - The UM982 takes two values, one for the master antenna and one for the slave. The default is **SG 4 5**.
   - **SG 3 6** is also supported. With it, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests".
   - The UM980 plan's `CONFIG SIGNALGROUP 2` is **not** a UM982 value.
+- **Rate and accuracy (HW Table 1-1):**
+  - 20 Hz positioning and heading, 20 Hz raw observations.
+  - Heading accuracy is **0.1° RMS for a 1 m baseline**. It scales roughly with 1/baseline, so a 2 m bar gives about 0.05° (estimate, not yet measured).
+  - RTK accuracy is the same as the UM980: 0.8 cm + 1 ppm H, 1.5 cm + 1 ppm V.
+  - Unlike the UM980, the UM982 has no 50 Hz option. This project only uses 20 Hz.
 - **Everything else in the UM980 plan holds for the UM982:** `FRESET`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS`, `CONFIG PPS`, `CONFIG COMx`, `BESTNAVB`, `STADOPB`, `UNILOGLIST`, `SAVECONFIG` and `RXTYPE AUTO`. `BESTNAV` refers to the master antenna (ANT1); the slave antenna's position is in a separate log, `BESTNAVH` (§7.5.20).
 
 ## Hardware
@@ -52,11 +58,15 @@ Related:
   - Mounted across the cab (left → right), `baseline_yaw_b` is +90°.
 - **Lever arm:** `gnss_leverarm_b` in `ins_options_t` is ANT1's, because BESTNAV is the master antenna position.
 - **Ports: no change.**
-  - UART1 ↔ COM1 at 460800 carries commands, binary logs out and RTCM in.
-  - COM2/COM3 are set to 460800 and not connected. On the Zero 2 W companion, COM2 is used as described in [gnss-um980-config.md](gnss-um980-config.md).
+  - UART1 ↔ COM2 at 460800 carries commands, binary logs out and RTCM in.
+  - COM1 is the module's USB-C port, left for a PC. COM3 is not connected, except on the Zero 2 W companion, which uses it as described in [gnss-um980-config.md](gnss-um980-config.md). All three are set to 460800.
   - No port is ever locked (`CONFIG RXTYPE` is never sent). PPS goes to the same GPIO.
-- **Footprint:** whether the UM982 is pin-compatible with the UM980 (so one carrier board takes both) is **not yet verified**. Check it against the UM982 datasheet. If it isn't, the variant needs a second carrier board.
-- **Power:** take the figure from the UM982 datasheet. It's expected to be above the UM980's 480 mW (estimate, not yet measured).
+- **Ready-made modules, same connections.** The UM980 and the UM982 both come on ready-made modules with the same connections: USB-C (COM1), COM2 RX/TX, COM3 RX/TX, PPS, 5 V and GND. The Pico wiring is therefore identical for both, and swapping receivers is a plug change, not a board change. The UM982 module adds a second antenna connector (ANT2).
+  - The bare UM982 (48-pin LGA) is not pin-compatible with the bare UM980 (54-pin LGA) (HW Table 1-1, §2.1), but the modules hide that. The pin-level rules in HW §3 (V_BCKP, BIF pull-ups, antenna feed, power-on ramp) are the module maker's job.
+  - The modules have no RESET_N pin, so the firmware can't hard-reset a stuck receiver. It uses `RESET` over COM2, and power-cycling the 5 V would need a load switch (open question).
+- **Power:** the module takes 5 V. The bare UM982 draws 180 mA typical and **300 mA maximum** at 3.3 V, 600 mW (HW Table 2-4), against 480 mW typical for the UM980. The 600 mW figure is for 10 Hz PVT + 10 Hz RTK + 10 Hz heading, so at 20 Hz expect more. The module's regulator and the active antennas add to that, so measure the 5 V current of each module (estimate, not yet measured).
+- **Logic level:** check on the bench that the module's COM2 TX and PPS swing 3.3 V, not 5 V, before wiring them to Pico GPIO.
+- **Slave antenna signals:** ANT2 tracks fewer signals than ANT1: BDS B1I/B2I/B3I, GPS L1 C/A/L2C, GLONASS L1/L2, Galileo E1/E5b, QZSS L1/L2 (HW Table 1-1). The slave antenna has no L5/E5a. That matters for heading only; position comes from ANT1.
 
 ## Detection and configuration (core 0, `gnss_um980_cfg` extended)
 The state machine in [gnss-um980-config.md](gnss-um980-config.md) stays as it is, except for these changes. Renaming the module to `gnss_unicore_cfg` is left to the implementation.
@@ -70,12 +80,12 @@ The state machine in [gnss-um980-config.md](gnss-um980-config.md) stays as it is
 | Heading mode | — | `CONFIG HEADING VARIABLELENGTH` |
 | Heading reliability | — | default (3), not sent |
 | Heading offset | — | not sent (stays 0). The firmware applies `baseline_yaw_b` itself |
-| Logs | `BESTNAVB COM1 0.05`, `STADOPB COM1 1` | the same, plus `UNIHEADINGB COM1 0.05` |
+| Logs | `BESTNAVB COM2 0.05`, `STADOPB COM2 1` | the same, plus `UNIHEADINGB COM2 0.05` |
 | Everything else | as in the UM980 plan | same |
 
 3. **Fast-path check:** on a UM982, the `CONFIG` reply must also contain the HEADING VARIABLELENGTH line, and `UNILOGLIST` must show three logs (five with the Zero 2 W companion).
 4. **Provision:** the same steps, with the UM982 rows. `CONFIG HEADING VARIABLELENGTH` goes with the step 4 settings (after the signal-group reboot, before `SAVECONFIG`). `UNIHEADINGB` goes with the logs in step 6.
-5. **Bandwidth:** UNIHEADINGB is about 24 + 44 + 4 B. At 20 Hz that is about 1.4 kB/s, so COM1 TX carries about 4.5 kB/s in total, about 10 % of 460800.
+5. **Bandwidth:** UNIHEADINGB is about 24 + 44 + 4 B. At 20 Hz that is about 1.4 kB/s, so COM2 TX carries about 4.5 kB/s in total, about 10 % of 460800.
 6. **Where the offset is stored:** `baseline_yaw_b` is an install setting, stored in Pico flash and editable on the web config page ([web-config-server.md](web-config-server.md)). It is not stored in the receiver, so swapping a receiver doesn't lose it.
 
 ## VARIABLELENGTH and the mount
@@ -87,7 +97,7 @@ In VARIABLELENGTH mode the receiver doesn't check the baseline length against a 
 ## INSLIB integration
 `ins_measurements_t` already has an absolute yaw input made for this (`external/INSLIB/src/ins.h`, `ins_meas_yaw_t` and its comment "dual-antenna GNSS heading"):
 - **`m.yaw.yaw_rad`** = wrap(heading_deg − `baseline_yaw_b`) × π/180. The heading is clockwise from true north, which is the same as NED yaw. Pitch isn't used at first.
-- **`m.yaw.stddev_rad`:** UNIHEADING's heading σ in radians, with a floor (start at 0.2°, tune from logs). Receiver σ is usually optimistic.
+- **`m.yaw.stddev_rad`:** UNIHEADING's heading σ in radians, with a floor (start at 0.1° × 1 m / baseline length from the datasheet figure, tune from logs). Receiver σ is usually optimistic.
 - **`m.yaw.is_valid`** is true only when all of these hold:
   - The solution status is SOL_COMPUTED.
   - The position type is a fixed-ambiguity type (e.g. `NARROW_INT`; confirm the values on the bench).
@@ -132,5 +142,6 @@ The same as for the UM980 ([rtos-decision.md](rtos-decision.md)):
    - The position-type values that mean a fixed heading.
    - The heading latency against BESTNAV in the same epoch.
    - VARIABLELENGTH against TRACTOR behaviour.
-   - Pin compatibility with the UM980 and power, from the UM982 datasheet.
+   - The 5 V current of each module at 20 Hz positioning + heading (the datasheet's 600 mW is for 10 Hz).
+   - The module's COM2 and PPS logic level (3.3 V expected).
    - Whether SG 4 5 reaches 20 Hz.
