@@ -3,7 +3,7 @@
 ## Context
 The IMU is a SYD Dynamics TransducerM **TM210** (9-axis AHRS). INSLIB does its own fusion ([inslib-nav-suite.md](inslib-nav-suite.md)), so the TM210 is used only as a source of calibrated raw gyro, accelerometer and magnetometer samples. This plan covers how to configure it, how to read it on the RP2350, and how to convert its data into what INSLIB expects.
 
-Sources: `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/datasheets/TransducerM_TM3xx_UserGuide_EN_V135-R1.pdf` (EasyProtocol section; the protocol is shared across TransducerM models). Vendor example code and the TM210 3D model (`TransducerM_TM210_3D-Shape_V1-1-2.stp`, for mounting) are in `external/syd_dynamics/`.
+Sources: `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/datasheets/TransducerM_TM3xx_UserGuide_EN_V135-R1.pdf` (EasyProtocol section; the protocol is shared across TransducerM models). Vendor example code and the TM210 3D model (`TransducerM_TM210_3D-Shape_V1-1-2.stp`, for mounting) are in `external/syd_dynamics/`. Vendor Q&A: https://www.syd-dynamics.com/questions-answers/.
 
 ## Key facts
 - Internal update rate 800 Hz. Output data rate (ODR) selectable: 800, 400, 200, 100, 50, 25, 10, 5, 1 Hz.
@@ -42,10 +42,10 @@ The Pico checks these settings at every boot and provisions the TM210 if they do
 | Temperature calibration (`reserved7`) | 0 | Vendor recommendation |
 | Boot mode | Auto boot (3.2 s cold start) | No need for the 10–30 s static boot; INSLIB levels itself |
 | Calibration commands (CalibB, forced calibration per AN002, heading fix) | never sent | They only affect the TM210's fused outputs. With raw-only output they are irrelevant, and INSLIB estimates the biases |
-| Sensor fusion profile, gains | unchanged | Does not affect raw data output |
+| Sensor fusion profile, gains, gyro/acc/mag enable checkboxes | unchanged | Do not affect raw data output (the vendor Q&A says so for the enable checkboxes) |
 | Status object | not auto-output; Pico requests it at 1 Hz | Temperature and QoS for logs and the web page |
 
-Recovery: if the baud rate is unknown, the firmware scans the supported rates itself. ImuAssistant is still used for bench work (Allan variance, debugging) and for the one-time capture of how ODR is encoded in the Setting object.
+Recovery: if the baud rate is unknown, the firmware scans the supported rates itself. By hand, the TM210 is recovered over its USB port (vendor Q&A); the 6-second 115200 SCAN lock in the user guide is for the TM200/TM35x, not the TM210. ImuAssistant is still used for bench work (Allan variance, debugging) and for the one-time capture of how ODR is encoded in the Setting object.
 
 Check after configuring: the TM210 sends only CMD 41 packets at 800 ± 20 Hz on UART1.
 

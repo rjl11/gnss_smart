@@ -12,6 +12,7 @@ Sources:
 - `docs/datasheets/TransducerM_TM3xx_UserGuide_EN_V135-R1.pdf`: EasyProtocol objects Request 12, Acknowledge 13, Setting 21, Status 22, Calibration 23, Raw 41. Also the sections "Communication Protocol" and "Change UART Baudrate".
 - `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`: ODR values, baud range, start-up times.
 - `docs/TransducerM_AN002_EN_V11.pdf`: run-time forced calibration for AGVs.
+- SYD Dynamics Q&A, https://www.syd-dynamics.com/questions-answers/ (read 2026-11-06): ODR vs Inhibit Time per model, baud recovery per model, the effect of the sensor enable checkboxes, calibration.
 - SYD Dynamics example code in `external/syd_dynamics/` (vendored, not compiled; overview in its `README.md`):
   - `TransducerM_Example_CPP_QT_V131-R1/EasyProfile/EasyObjectDictionary.h` (EasyProfile V1-3-1-R1, 2025): the current `Ep_Settings`, `Ep_Switches` and `Ep_Combo` definitions.
   - `TransducerM_Example_CPP_QT_V131-R1/HelloMotionModule.cpp`, `Example_ChangeSetting()`: the vendor's read-modify-write sequence for settings.
@@ -82,11 +83,13 @@ Sources:
   - Boot mode only takes effect after a power cycle, and only if it was saved to flash.
 - **ODR is not documented** in the guide, the datasheet or any library version.
   - The guide only says that some models show ODR in place of Inhibit Time. The TM210 offers 800, 400, 200, 100, 50, 25, 10, 5 and 1 Hz.
+  - The SYD Q&A confirms that the TM210 is one of the ODR models (it has no Inhibit Time) and that 800 Hz is available on it. It still doesn't give the encoding.
   - How ODR is encoded in bytes 14–15 must be read from a TM210 set to 800 Hz in ImuAssistant (verification step 1). The result becomes a firmware constant.
 - **Baud:**
   - The factory default is 115200. Supported rates are 1M, 921600, 460800, 230400, 115200, 57600, 38400, 9600, 2400 and 1200.
-  - The datasheet recommends ≥921600 for ODR ≥ 400 Hz.
-  - ImuAssistant's recovery (a scan within 6 s of power-up locks 115200) relies on an undocumented scan sequence. The firmware scans baud rates instead.
+  - The datasheet recommends ≥921600 for ODR ≥ 400 Hz. The Q&A asks for ≥230400 or ≥460800 at 400/800 Hz, "depending on the number of different data types selected for output". 921600 with raw output only is well inside both.
+  - **Recovery when the baud is unknown:** for the TM210 the vendor's answer is the USB port ("simply use its USB interface to connect and find or reset the baudrate"). The 6-second 115200 SCAN lock in the user guide applies to the TM200/TM35x only. The firmware scans the UART baud rates itself, and USB stays enabled as the manual fallback.
+- **Sensor enable bits (gyro/acc/mag):** per the Q&A they choose what goes into the TM210's own fusion (Quaternion, and from it Euler/RPY/Gravity), and they "do not affect Raw Accelerometer, Gyroscope and Magnetometer output". So they are left as they are and not checked.
 - **Calibration commands** (CMD 23: CalibB, AN002 forced calibration, heading fix, compass calibration) affect only the TM210's own fused outputs. **We use raw data only, so the firmware never sends them.** INSLIB estimates the biases itself.
 - **`Ep_Combo` (CMD 43, new in 2025)** is a packed set of integers: gyro in 1e-5 rad/s, acc in 1e-5 g with the library's 1 g = 9.794 m/s², plus QoS, temperature and rate. It is not used. Raw (CMD 41, float32) keeps full resolution and is what [imu-tm210.md](imu-tm210.md) is built on.
 - **Start-up:** Auto boot gives a 3.2 s cold start, and Static boot 10–30 s. The TM210 answers requests even during its silent time.
@@ -96,11 +99,11 @@ Read-modify-write. Every field not listed is copied unchanged from the read-back
 
 | Field | Target | Why |
 |---|---|---|
-| gyro / acc / mag enable | 1 / 1 / 1 | Raw data needs all three |
+| gyro / acc / mag enable | unchanged (copied, not checked) | Q&A: no effect on raw output |
 | Status, Quaternion, Euler, RPY, Gravity output | 0 | Raw only. The Pico requests Status at 1 Hz |
 | Raw output | 1 | INSLIB input |
 | enable_UART1 | 1 | Link to the Pico |
-| enable_USB1_CAN1 | 1 | ImuAssistant on USB for debugging, alongside the Pico |
+| enable_USB1_CAN1 | 1 | ImuAssistant on USB for debugging, alongside the Pico. Also the TM210's recovery path if the UART baud is lost |
 | reserved7 (temperature calibration) | 0 | Vendor recommendation |
 | bootMode | 0 (Auto) | 3.2 s cold start; INSLIB levels itself |
 | uart1_Baudrate | 9216 (921600) | 49 B × 800 Hz ≈ 43 % load |
@@ -116,7 +119,7 @@ Read-modify-write. Every field not listed is copied unchanged from the read-back
    - From the reply, keep the node ID (`fromId`) and the raw 20-byte settings.
 2. **Check (fast path):**
    - Only when the TM210 was found at 921600.
-   - Compare the target fields. If they match and CMD 41 arrives at 800 ± 20 Hz over 1 s, configuration is done.
+   - Compare the target fields: the output switches (Status, Raw, Quaternion, Euler, RPY, Gravity), UART1 enable, USB enable, temperature calibration, boot mode, baud, ODR and silent time. The sensor enables and the fusion fields are not compared. If they match and CMD 41 arrives at 800 ± 20 Hz over 1 s, configuration is done.
    - Nothing is written to the TM210's flash, and boot takes about 1.3 s longer.
 3. **Provision.** Runs on any mismatch, or from the "Reconfigure IMU" button on the web page ([web-config-server.md](web-config-server.md)):
    1. **Apply to RAM:**

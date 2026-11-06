@@ -23,6 +23,9 @@ None of these examples write the output data rate (ODR), and none show how ODR i
 - **CRC write:** the STM32 copy's `EasyProtocol.cpp` writes the CRC byte by byte. The QT copy does a single `uint16` store, which can be unaligned.
 - **`Ep_Settings` / `Ep_Calib`:** only in the QT copy. The embedded copies leave them out.
 
+## See also
+SYD Dynamics Q&A, https://www.syd-dynamics.com/questions-answers/. It covers ODR vs Inhibit Time per model, baud recovery per model (USB for the TM210), host buffer sizing (`EP_BUFFFER_MULTIPLIER_` in `BasicTypes.h`), and how to compile the library.
+
 ## Licenses
 - EasyProfile: BSD-style, © SYD Dynamics ApS. The notice is in each library's `License.txt` and file headers, and must be kept.
 - STM32 project: ST's generated files carry ST's own license headers.
