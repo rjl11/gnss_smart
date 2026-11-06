@@ -1,7 +1,7 @@
 # ESP32-S3 as Wi-Fi/BLE companion to a plain Pico 2
 
 ## Context
-The question: can a Pico 2 with no radio use an ESP32-S3 for wireless, in place of the CYW43439 chip on the Pico 2 W? The wireless features in question are the web config page ([web-config-server.md](web-config-server.md)), and the Bluetooth link to SW Maps on Android, which carries NMEA out and RTCM corrections in ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)). The chip itself is covered in [esp32-s3-feasibility.md](esp32-s3-feasibility.md).
+The question: can a Pico 2 with no radio use an ESP32-S3 for wireless, in place of the CYW43439 chip on the Pico 2 W? The wireless features in question are the web config page ([web-config-server.md](web-config-server.md)), and the Bluetooth link to SW Maps on Android, which carries NMEA out and RTCM corrections in ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)). The chip itself is covered in [esp32-s3-feasibility.md](esp32-s3-feasibility.md). The Linux alternative, a Raspberry Pi Zero 2 W over USB, is in [pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md).
 
 ## Answer: yes, with each chip owning whole features
 The S3 works best running its own firmware that owns the wireless features. Using it as a bare network adapter that the Pico drives byte by byte works less well. There are three ways to connect it:

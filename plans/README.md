@@ -8,6 +8,7 @@ Planning documents for gnss_smart: system architecture, hardware selection (MCU,
 | [esp32-p4-feasibility.md](esp32-p4-feasibility.md) | ESP32-P4 as an alternative MCU |
 | [esp32-s3-feasibility.md](esp32-s3-feasibility.md) | ESP32-S3 as an alternative MCU: CPU budget, UART count, Wi-Fi/BLE, risks |
 | [esp32-s3-wifi-companion.md](esp32-s3-wifi-companion.md) | Plain Pico 2 + ESP32-S3 as Wi-Fi/BLE companion: link, protocol, split of work |
+| [pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md) | Plain Pico 2 + Pi Zero 2 W as Linux companion over USB: split of work, RTCM into COM2, stratum 1 NTP, SWD debug rig |
 | [inslib-nav-suite.md](inslib-nav-suite.md) | INSLIB integration through `nav_suite`: options, epoch building, outputs |
 | [imu-tm210.md](imu-tm210.md) | TM210 IMU configuration, protocol, unit/frame conversion and calibration for INSLIB |
 | [imu-tm210-config.md](imu-tm210-config.md) | TM210 auto-configuration by the MCU: Setting object, boot check/provision state machine, RAM-then-flash commit |

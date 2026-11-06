@@ -60,6 +60,7 @@ A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It d
 Notes:
 - The manual says COM1 should be kept for firmware upgrades. COM1 is on the MCU, so firmware upgrades of the UM980 have two routes: a passthrough in the RP2350, or a header on the COM1 lines with the MCU's TX held off.
 - UM980 COM2 and COM3 are not connected to the MCU. They run at 460800 and are unlocked, so a PC tool on a header can use them.
+- With the Zero 2 W companion, COM2 and PPS also go to the Zero, and RTCM enters COM2 from the Zero instead of COM1 through the Pico ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)).
 - All RTCM now passes through the MCU (Bluetooth → UART1 TX → COM1), so it can be logged or checked for free.
 
 ## Bluetooth link: output and RTCM in (on-board CYW43439)

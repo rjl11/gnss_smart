@@ -8,6 +8,7 @@ Decisions fixed by the user:
 - COM1, COM2 and COM3 all run at **460800**.
 - **No port is ever locked** (`CONFIG RXTYPE` is never sent), because of the risk of bricking the receiver.
 - **Only COM1 is used.** It carries commands, binary logs out and RTCM corrections in. COM2 and COM3 are not connected; only their baud rate is set.
+  - **Exception, Zero 2 W companion only** ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)): COM2 is wired both ways to the Zero's UART. The Zero writes only CRC-checked RTCM into COM2 RX and never sends commands, so the Pico stays the only device that configures the receiver. COM2 TX carries `GPRMC COM2 1` and `GPZDA COM2 1`, which the Pico enables after the `UNLOG`s, for the Zero's NTP server. RTCM then enters COM2, not COM1. COM2 stays `AUTO`; no `RXTYPE` lock.
 
 Sources: `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf` (section numbers below refer to it) and `docs/datasheets/UM980_Datasheet.pdf`.
 
@@ -100,7 +101,7 @@ Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)
 1. A factory-new UM980 (or one reset with `FRESET` from UPrecise) is provisioned with no user action. The log shows every step OK and the total time (40–60 s, estimate, not yet measured).
 2. Power-cycle: the fast path passes, no `FRESET` is sent, and BESTNAVB arrives at 20 Hz.
 3. Change one setting by hand (e.g. `CONFIG COM1 115200` + `SAVECONFIG`). On the next boot it is detected and re-provisioned.
-4. `CONFIG` shows SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE. `UNILOGLIST` shows only the two logs.
+4. `CONFIG` shows SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE. `UNILOGLIST` shows only the two logs (four with the Zero 2 W companion: plus `GPRMC` and `GPZDA` on COM2).
 5. RTCM from SW Maps flows into COM1 while BESTNAVB streams:
    - The receiver reaches RTK fixed.
    - BESTNAVB stays at 20 Hz with no CRC errors.

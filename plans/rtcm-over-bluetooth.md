@@ -43,6 +43,7 @@ Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary
    - **No port is locked.** `CONFIG RXTYPE` is never sent, because of the risk of bricking. COM1 stays at the default `AUTO`, and in rover mode the receiver recognises RTCM by itself.
    - Only one cable is needed, and no PIO state machine. UM980 COM2/COM3 are not connected.
 - **Rejected alternative:** a PIO UART TX to COM2, locked with `CONFIG RXTYPE COM2 RTCM`. It keeps COM1 free of corrections, but it needs a port lock (bricking risk) and a second wire.
+- **Zero 2 W companion variant:** RTCM goes from the Zero's UART into COM2, but with **no** port lock. COM2 stays `AUTO` and the Zero writes only CRC-checked RTCM frames ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)). The rejected variant above needed `RXTYPE`; this one doesn't.
 
 ## Monitoring and failure behaviour
 - **Correction age and RTK status** come from BESTNAVB (differential age, position type), which the UM980 parser already reads.
