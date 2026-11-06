@@ -16,10 +16,10 @@ This folder holds the TransducerM example projects and the TM210 3D model from S
 | `TransducerM_Protocol_C_V1-2-1-Beta/` | Plain C version of the library (2017). Request and receive only |
 | `TransducerM_TM210_3D-Shape_V1-1-2.stp` | TM210 STEP model, for mounting and enclosure design |
 
-None of these examples write the output data rate (ODR), and none show how ODR is encoded in the Setting object. That still has to be read off a real TM210 (see the verification section of the TM210 config plan).
+None of these examples write the output data rate (ODR), and none show how ODR is encoded in the Setting object. On a real TM210 it is a uint16 in Hz at bytes 18–19, the upper half of what the library calls `silentTime`. Several switch bits also differ from the library's comments: bit 20 is USB output, bits 26/27 are CMD 42/43 output, and bit 28 slows the output. The bench-verified layout is in [plans/imu-tm210-config.md](../../plans/imu-tm210-config.md).
 
 ## Known differences between the library copies
-- **The 3 header bits after CMD:** the embedded and ROS copies call them `qos` ("Quality-of-Service of the source device (only available on certain Models)"). The QT copy and the user guide call them `res`, "must be zero". No copy's parser rejects non-zero values. The firmware accepts any value and reports it as QoS.
+- **The 3 header bits after CMD:** the embedded and ROS copies call them `qos` ("Quality-of-Service of the source device (only available on certain Models)"). The QT copy and the user guide call them `res`, "must be zero". No copy's parser rejects non-zero values. On the TM210 they read 0 on every packet, so the firmware accepts and ignores them, and takes QoS from the Status object.
 - **CRC write:** the STM32 copy's `EasyProtocol.cpp` writes the CRC byte by byte. The QT copy does a single `uint16` store, which can be unaligned.
 - **`Ep_Settings` / `Ep_Calib`:** only in the QT copy. The embedded copies leave them out.
 

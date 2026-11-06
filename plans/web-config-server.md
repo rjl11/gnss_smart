@@ -27,7 +27,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - Per-sensor: measured rate (IMU 800 Hz, baro 100 Hz, GNSS 20 Hz), packets received, checksum/framing errors, UART overruns, time since last sample.
 - GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset.
 - UM980 setup: provisioning state (detecting / checking / provisioning step N / running / error), last error, receiver serial number and firmware build ([gnss-um980-config.md](gnss-um980-config.md)).
-- TM210 setup: provisioning state, last error, node ID, and the QoS from the packet header and Status object ([imu-tm210-config.md](imu-tm210-config.md)).
+- TM210 setup: provisioning state, last error, node ID, and the QoS and temperature from the Status object ([imu-tm210-config.md](imu-tm210-config.md)).
 - Filter: mode (aligning / navigating), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
 - Corrections: Bluetooth connected (BLE or SPP), RTCM bytes and frames received from SW Maps, CRC errors, time since the last frame, message types seen ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
 - Ethernet (on hold): link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233.

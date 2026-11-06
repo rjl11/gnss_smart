@@ -3,7 +3,7 @@
 ## Context
 The IMU is a SYD Dynamics TransducerM **TM210** (9-axis AHRS). INSLIB does its own fusion ([inslib-nav-suite.md](inslib-nav-suite.md)), so the TM210 is used only as a source of calibrated raw gyro, accelerometer and magnetometer samples. This plan covers how to configure it, how to read it on the RP2350, and how to convert its data into what INSLIB expects.
 
-Sources: `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/datasheets/TransducerM_TM3xx_UserGuide_EN_V135-R1.pdf` (EasyProtocol section; the protocol is shared across TransducerM models). Vendor example code and the TM210 3D model (`TransducerM_TM210_3D-Shape_V1-1-2.stp`, for mounting) are in `external/syd_dynamics/`. Vendor Q&A: https://www.syd-dynamics.com/questions-answers/.
+Sources: `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/TransducerM_TM3xx_UserGuide_EN_V135-R1.pdf` (EasyProtocol section; the protocol is shared across TransducerM models). Vendor example code and the TM210 3D model (`TransducerM_TM210_3D-Shape_V1-1-2.stp`, for mounting) are in `external/syd_dynamics/`. Vendor Q&A: https://www.syd-dynamics.com/questions-answers/.
 
 ## Key facts
 - Internal update rate 800 Hz. Output data rate (ODR) selectable: 800, 400, 200, 100, 50, 25, 10, 5, 1 Hz.
@@ -18,7 +18,7 @@ Sources: `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/data
 ## EasyProtocol packet
 `AA 55 | length (1 B) | header (4 B) | payload | CRC16 (2 B, Modbus, over length + header + payload)`
 
-Header bit fields: CMD (7 bits), QoS (3 bits), FROM_ID (11), TO_ID (11). The user guide calls the 3 bits "reserved, must be 0". The newer embedded EasyProfile builds (V1-3-1) define them as the sender's QoS, so accept any value ([imu-tm210-config.md](imu-tm210-config.md)).
+Header bit fields: CMD (7 bits), 3 bits, FROM_ID (11), TO_ID (11). The user guide calls the 3 bits "reserved, must be 0", and the newer embedded EasyProfile builds call them QoS. On the TM210 they read 0 on every packet, so accept any value and ignore it. QoS comes from the Status object ([imu-tm210-config.md](imu-tm210-config.md)).
 
 **Raw Sensor Data object, CMD 41** (40-byte payload, 49 bytes per packet):
 | Bytes | Field | Unit |
@@ -35,23 +35,23 @@ The Pico checks these settings at every boot and provisions the TM210 if they do
 
 | Setting | Value | Why |
 |---|---|---|
-| Output objects | **Raw data only**. Status, RPY, Quaternion, Euler, Gravity off | INSLIB fuses itself; less traffic and parsing |
-| ODR | 800 Hz | Full internal rate; INSLIB strapdown at 800 Hz |
+| Output objects | **Raw data only**. Status, RPY, Quaternion, Euler, Gravity, Combo (CMD 43) and CMD 42 off | INSLIB fuses itself; less traffic and parsing |
+| ODR | 800 Hz (Setting bytes 18–19, in Hz; verified on the bench) | Full internal rate; INSLIB strapdown at 800 Hz |
 | UART1 baud | 921600 | 49 B × 800 Hz = 39.2 kB/s ≈ 392 kbit/s with start/stop bits, ~43 % of 921600 |
-| USB output (`enable_USB1_CAN1`) | enabled | Debugging with ImuAssistant while the Pico reads UART |
+| USB output (switch bit 20) | on | ImuAssistant can debug over USB while the Pico reads UART; also the recovery path. The TM210 has no CAN bus, so the user guide's CAN settings don't apply |
 | Temperature calibration (`reserved7`) | 0 | Vendor recommendation |
 | Boot mode | Auto boot (3.2 s cold start) | No need for the 10–30 s static boot; INSLIB levels itself |
 | Calibration commands (CalibB, forced calibration per AN002, heading fix) | never sent | They only affect the TM210's fused outputs. With raw-only output they are irrelevant, and INSLIB estimates the biases |
 | Sensor fusion profile, gains, gyro/acc/mag enable checkboxes | unchanged | Do not affect raw data output (the vendor Q&A says so for the enable checkboxes) |
 | Status object | not auto-output; Pico requests it at 1 Hz | Temperature and QoS for logs and the web page |
 
-Recovery: if the baud rate is unknown, the firmware scans the supported rates itself. By hand, the TM210 is recovered over its USB port (vendor Q&A); the 6-second 115200 SCAN lock in the user guide is for the TM200/TM35x, not the TM210. ImuAssistant is still used for bench work (Allan variance, debugging) and for the one-time capture of how ODR is encoded in the Setting object.
+Recovery: if the baud rate is unknown, the firmware scans the supported rates itself. By hand, the TM210 is recovered over its USB port (vendor Q&A); the 6-second 115200 SCAN lock in the user guide is for the TM200/TM35x, not the TM210. ImuAssistant is still used for bench work (Allan variance, debugging).
 
 Check after configuring: the TM210 sends only CMD 41 packets at 800 ± 20 Hz on UART1.
 
 ## Firmware: reading the TM210 (core 0)
 - **UART0** at 921600, RX into a DMA ring buffer (≥4 KB, ~100 ms of data). TX is only used for the 1 Hz status request.
-- **Parser**: sync on `AA 55`, check length and CRC, accept any value in the 3 QoS bits, accept CMD 41 (plus 21, 13 and 22 when requested or during configuration). Count CRC errors and lost packets for diagnostics.
+- **Parser**: sync on `AA 55`, check length and CRC, accept and ignore the 3 header bits after CMD, accept CMD 41 (plus 21, 13 and 22 when requested or during configuration). Count CRC errors and lost packets for diagnostics.
 - **Timestamps**:
   - Unwrap the uint32 µs timestamp to 64-bit.
   - Use TM210 timestamp differences for `strapdown_dt_sec` (the sensor's own sample spacing, no UART jitter).
