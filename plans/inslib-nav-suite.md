@@ -29,7 +29,7 @@ What that buys over bare `ins`:
 | `ins_options_t` field | Value | Why |
 |---|---|---|
 | `auto_init` | true | Bootstrap from the first good fix; roll/pitch from leveling |
-| `automotive_mode` | true | Yaw from GNSS course over ground. UM980 is single-antenna, so this is the main heading source when moving |
+| `automotive_mode` | true on a UM980, false on a UM982 | Yaw from GNSS course over ground. The UM980 is single-antenna, so this is the main heading source when moving. The UM982 variant feeds its dual-antenna heading into `m.yaw` instead ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)) |
 | `automotive_min_speed_mps` | 0 (default 2 m/s) to start; try ~1 m/s for slow field work | Below it the course is noise |
 | `kalman_update_dt_sec` | 0 (= 20 Hz) | Covariance prediction rate |
 | `auto_zupt_disable` | false | Bias re-estimation whenever the tractor stands still |

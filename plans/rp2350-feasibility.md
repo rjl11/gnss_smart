@@ -25,7 +25,7 @@ That totals roughly **5–10 % of one core**. The second core is free for parsin
 
 ## Real risks (I/O and timing, not compute)
 1. **TM210 at 800 Hz:** raw data only is 49 B per packet, so 39.2 kB/s. Run UART at 921600 baud (about 43 % load, the vendor's recommendation for ODR ≥400 Hz), received via DMA. Configuration and conversion: [imu-tm210.md](imu-tm210.md). How samples go into `nav_suite`: [inslib-nav-suite.md](inslib-nav-suite.md).
-2. **UM980 at 20 Hz:** use Unicore binary logs (BESTNAVB at 20 Hz, STADOPB at 1 Hz) at 460800 baud rather than heavy NMEA. Also use PPS so GNSS timestamps line up with IMU time. The MCU configures the receiver itself at boot: [gnss-um980-config.md](gnss-um980-config.md).
+2. **UM980 at 20 Hz:** use Unicore binary logs (BESTNAVB at 20 Hz, STADOPB at 1 Hz) at 460800 baud rather than heavy NMEA. Also use PPS so GNSS timestamps line up with IMU time. The MCU configures the receiver itself at boot: [gnss-um980-config.md](gnss-um980-config.md). The UM982 dual-antenna variant uses the same UART1/COM1 layout and adds UNIHEADINGB at 20 Hz (about 1.4 kB/s): [gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md).
 3. **Timestamping:** INSLIB tolerates measurement delay through a history buffer (`ins.h`). Every sample still needs an accurate capture timestamp, so take it in the ISR or DMA-complete handler.
 4. **Execution from flash:** the RP2350 executes code from external QSPI flash through a cache (XIP). To get deterministic timing, put the filter's hot path in SRAM (`__not_in_flash_func` / `copy_to_ram` build).
 

@@ -15,6 +15,7 @@ Planning documents for gnss_smart: system architecture, hardware selection (MCU,
 | [imu-adis16465-vs-tm210.md](imu-adis16465-vs-tm210.md) | ADIS16465-2 as an alternative IMU: datasheet comparison, system effect, firmware impact |
 | [gnss-mosaic-x5-vs-um980.md](gnss-mosaic-x5-vs-um980.md) | Septentrio mosaic-X5 as an alternative GNSS receiver: datasheet comparison, system effect, firmware impact |
 | [gnss-um980-config.md](gnss-um980-config.md) | UM980 auto-configuration by the MCU: command set, boot check/provision state machine, COM1 shared by commands and RTCM |
+| [gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md) | UM982 dual-antenna variant (GNSS compass): boot detection of UM980/UM982, per-model config, heading into INSLIB `m.yaw` |
 | [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) | RTCM from SW Maps (Android NTRIP) over Bluetooth to UM980 COM1; replaces the radio |
 | [rtos-decision.md](rtos-decision.md) | Bare metal first, FreeRTOS later |
 | [web-config-server.md](web-config-server.md) | GPIO-toggled web config and diagnostics server |

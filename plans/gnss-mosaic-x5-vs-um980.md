@@ -32,7 +32,7 @@ Sources: `docs/datasheets/UM980_Datasheet.pdf` (R1.0, 2022-08), `docs/datasheets
 
 \* after a firmware upgrade.
 
-Both are single-antenna receivers. A dual-antenna variant (mosaic-H, UM982) would be needed for heading at standstill.
+Both are single-antenna receivers. A dual-antenna variant (mosaic-H, UM982) would be needed for heading at standstill. The UM982 is planned as a variant in [gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md).
 
 ## Effect on the system
 - **Open sky: no practical difference** for AgOpenGPS steering. Both hold 1–2 cm RTK, and the UM980 even initialises slightly faster on paper. The mosaic's ppm term is half the UM980's, which only shows on long baselines (e.g. 20 km NTRIP: 1.6 cm vs 2.8 cm + base).

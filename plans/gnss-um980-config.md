@@ -12,7 +12,7 @@ Decisions fixed by the user:
 
 Sources: `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf` (section numbers below refer to it) and `docs/datasheets/UM980_Datasheet.pdf`.
 
-Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) (RTCM source), [inslib-nav-suite.md](inslib-nav-suite.md) (what the logs feed), [web-config-server.md](web-config-server.md) (status and the "Reconfigure GNSS" action).
+Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) (RTCM source), [inslib-nav-suite.md](inslib-nav-suite.md) (what the logs feed), [web-config-server.md](web-config-server.md) (status and the "Reconfigure GNSS" action), [gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md) (the UM982 dual-antenna variant reuses this state machine with per-model deltas).
 
 ## Facts from the manual
 - **`FRESET`** clears the saved configuration, ephemerides and position, sets all ports to 115200 and restarts the receiver (§8.1).
