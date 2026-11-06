@@ -26,6 +26,7 @@ No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come fr
   - An NTRIP client over Wi-Fi, so RTK works without SW Maps.
   - Optionally, AgOpenGPS/AgIO UDP over Wi-Fi, with the payload defined in the on-hold Ethernet plan. The W5500 stays on hold.
   - The web config and diagnostics page, which replaces [web-config-server.md](web-config-server.md) on the Pico.
+  - Optionally, serial over TCP to the receiver's COM1, so a PC tool such as UPrecise reaches the UM980 over Wi-Fi (config item `gnss_tcp`, see below).
   - Raw sensor logging for replay through INSLIB.
   - A stratum 1 NTP server (see below).
   - SWD flashing and debugging of the Pico, plus `picotool` updates in the field.
@@ -66,6 +67,42 @@ No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come fr
   - `RAW`: about 50 kB/s. That is TM210 raw data at 39.2 kB/s ([rp2350-feasibility.md](rp2350-feasibility.md)) plus GNSS and baro.
   - Both are well within what a full-speed CDC link carries in practice.
 - **Linux side:** udev rules give the interfaces stable names by VID:PID and interface number, e.g. `/dev/gnss-link` and `/dev/um980-com1`.
+
+## Serial over TCP: the receiver from a PC (config item `gnss_tcp`)
+A PC on the Zero's Wi-Fi opens a TCP connection to the Zero and gets the UM980 COM1 byte stream, as if it were on a serial port. This is for UPrecise sessions, checking logs and sending the odd command without opening the case or plugging into the module's USB-C (COM3).
+
+- **Path:** PC ⇄ TCP over Wi-Fi ⇄ `ser2net` on the Zero ⇄ `/dev/um980-com1` (CDC 1) ⇄ the Pico ⇄ UART1 ⇄ UM980 COM1.
+  - **Why COM1 through CDC 1 and not COM2:** COM2 is already taken by gpsd (NMEA time) and the RTCM writer, and a tty can't be shared safely between them and ser2net. COM1 also carries the receiver's command replies and the Pico's logs, which is what a PC tool wants to see.
+  - **Receiver to PC:** the Pico copies every byte it receives on UART1 to CDC 1 unchanged, while it keeps parsing them itself. The PC sees `BESTNAVB` at 20 Hz, `STADOPB`, and all command replies, including the Pico's own.
+  - **PC to receiver:** the Pico assembles CDC 1 bytes into command lines (up to CR/LF, with a maximum length and a timeout) and hands only whole lines to the `um980_tx` command queue, so they go between RTCM frames and the Pico's own commands, as in [gnss-um980-config.md](gnss-um980-config.md). Partial lines are dropped when the session ends.
+  - **Baud:** CDC 1 is virtual, so the Pico ignores the line coding (and RFC 2217 baud requests). UART1 stays at 460800 whatever the PC asks for.
+- **Config item** (part of the versioned config struct, see "Config storage"):
+
+  | Field | Values | Default | Notes |
+  |---|---|---|---|
+  | `gnss_tcp.mode` | `off`, `monitor`, `full` | `off` | `monitor`: receiver output only, the Pico drops everything the PC sends. `full`: PC command lines are forwarded, with the blocks below |
+  | `gnss_tcp.port` | 1024–65535 | 9980 | TCP port on the Zero. Must not clash with GDB (3333) or the web page |
+  | `gnss_tcp.protocol` | `raw`, `rfc2217` | `raw` | `raw` for `socat` or `socket://` clients, `rfc2217` for virtual COM port drivers that speak it |
+  | `gnss_tcp.idle_timeout_s` | 0 = none, or seconds | 600 | Closes a forgotten session |
+
+  - The Zero writes the ser2net config from these fields and restarts ser2net on save.
+  - `mode` also goes to the Pico in `CFG_SET`, because the Pico enforces the write gate. Changing only `gnss_tcp` fields is a live change: the Pico does not pause the filter or re-align for it.
+  - The web page shows the item on its config page, plus whether a client is connected, its address, and bytes in and out.
+- **Blocks and safety (in `full` mode, enforced on the Pico):**
+  - `CONFIG RXTYPE` is rejected and never forwarded, so no port can be locked (risk of bricking, as everywhere in this project).
+  - `CONFIG COM1 <baud>` is rejected: it would cut the Pico's own link.
+  - While the Pico is provisioning the receiver, PC lines are dropped and counted, as RTCM is.
+  - Other commands (for example `UNLOG COM1`, `MODE`, `SAVECONFIG`) are forwarded. They can stop the logs the filter needs, so the web page warns about this. When the session closes, the Pico re-runs its config check (`UNILOGLIST`, `CONFIG`) and re-provisions anything that differs from [gnss-um980-config.md](gnss-um980-config.md).
+  - The Pico's command helper matches only replies to its own commands, and it sends no commands of its own in "Run" except through the web passthrough, so PC commands and replies don't confuse it.
+  - Receiver firmware upgrades over TCP are not supported. They stay on COM3 over USB-C, as in [rp2350-feasibility.md](rp2350-feasibility.md).
+- **Network exposure:** raw TCP has no authentication, so `full` gives anyone on the network control of the receiver.
+  - The default is `off`.
+  - ser2net listens only on the Wi-Fi interface (the Zero's access point or the station network), never on a wired or USB gadget interface.
+  - One client at a time (`max-connections=1`). A second client is refused.
+- **PC side:**
+  - Windows: UPrecise needs a COM port (check whether it can open a TCP connection directly). Use a virtual COM port driver that connects to `<zero>:9980`, with `rfc2217` if the driver speaks it, else `raw`.
+  - Linux: `socat pty,link=/tmp/um980,raw tcp:<zero>:9980`, or pyserial with `socket://<zero>:9980` (raw) or `rfc2217://<zero>:9980`.
+- **Bandwidth (estimate, not yet measured):** COM1 output is a few kB/s at 20 Hz `BESTNAVB`, well within CDC 1 and Wi-Fi.
 
 ## Timing
 - **All capture timestamps stay on the Pico,** taken in the ISR or DMA-complete handler and from PPS. USB and Linux jitter affect only output latency, never the filter.
@@ -112,7 +149,7 @@ The Zero drives the Pico's SWD port, so the first hardware build needs no separa
 - **SWD or picotool:** SWD is the development path, and it also recovers a Pico with broken flash. `picotool` over the USB reset interface is the field-update path, which needs no SWD wires.
 
 ## Config storage
-- **The master copy** of the versioned config struct lives on the Zero, on a small data partition outside the read-only root.
+- **The master copy** of the versioned config struct lives on the Zero, on a small data partition outside the read-only root. It includes the Zero-side items such as `gnss_tcp` (serial over TCP, above).
 - **The Pico keeps a last-known copy in its flash,** so it starts with the right settings long before the Zero has booted. It writes that copy only when the config changes, with the filter paused. The XIP stall and `multicore_lockout` handling from [web-config-server.md](web-config-server.md) then matter only at a save.
 - **At boot,** once the link is up, the Pico sends `CFG_GET`. If the reply differs from its copy, it applies the reply and re-aligns.
 
@@ -179,6 +216,8 @@ The costs are a Linux image to maintain, 20–40 s before wireless output, read-
 - The NMEA arrival offset for chrony.
 - The bit-bang SWD clock rate on the Zero 2 W, and how long a full flash takes.
 - SD card endurance with logging, or logging to a USB stick through a hub.
+- Whether UPrecise opens a TCP connection by itself, or needs a virtual COM port driver, and which drivers work with it over `raw` and `rfc2217`.
+- Whether UPrecise needs anything on COM1 beyond ASCII command lines (for example binary commands), which the line-based write gate would not pass.
 
 ## Verification (when implementing)
 1. **Link soak test:** 1 h of `POS` and `NMEA`, plus `RAW` at full rate. Expect zero CRC errors and no missing sequence numbers.
@@ -199,5 +238,11 @@ The costs are a Linux image to maintain, 20–40 s before wireless output, read-
    - A Wi-Fi client syncs at stratum 2.
    - Rebooting the Pico doesn't disturb chrony.
    - `UNILOGLIST` shows the two COM2 NMEA logs, and `CONFIG` shows no RXTYPE lock.
-7. **Power cuts:** cut power 50 times during logging. Expect no filesystem damage.
-8. **Replay:** a `RAW` log replayed through the host INSLIB `replay` matches the on-device output.
+7. **Serial over TCP (`gnss_tcp`):**
+   - `off`: nothing listens on the port.
+   - `monitor`: a PC with `socat` sees `BESTNAVB` and `STADOPB` at the expected rates, and a command sent from the PC gets no reply.
+   - `full`: UPrecise on a Windows PC connects through a virtual COM port and sends `VERSIONA`, which gets a reply. `CONFIG RXTYPE` and `CONFIG COM1 115200` are rejected and counted. `UNLOG COM1` from the PC stops the logs, and the Pico restores them when the session closes.
+   - The filter timing (bench replay) is unaffected during a session, and changing `gnss_tcp` causes no re-align.
+   - A second client is refused, and an idle session closes after the timeout.
+8. **Power cuts:** cut power 50 times during logging. Expect no filesystem damage.
+9. **Replay:** a `RAW` log replayed through the host INSLIB `replay` matches the on-device output.

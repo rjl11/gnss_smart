@@ -87,7 +87,7 @@ Logs:
 ## UART1 TX: one port for commands and RTCM
 UART1 TX has a single owner, the module `um980_tx`, fed by two queues:
 - **RTCM queue:** whole, CRC-checked RTCM3 frames from the Bluetooth path ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
-- **Command queue:** command lines from `gnss_um980_cfg` and, later, the web passthrough.
+- **Command queue:** command lines from `gnss_um980_cfg` and, later, the web passthrough and (with the Zero 2 W companion) serial over TCP from a PC, `gnss_tcp` in [pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md). Both reject `CONFIG RXTYPE`.
 
 Rules:
 - Only whole RTCM frames or whole command lines are written, so the two never interleave inside a frame or a line.
