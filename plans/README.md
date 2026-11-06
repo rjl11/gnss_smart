@@ -12,6 +12,13 @@ Planning documents for gnss_smart: system architecture, hardware selection (MCU,
 | [imu-tm210.md](imu-tm210.md) | TM210 IMU configuration, protocol, unit/frame conversion and calibration for INSLIB |
 | [imu-adis16465-vs-tm210.md](imu-adis16465-vs-tm210.md) | ADIS16465-2 as an alternative IMU: datasheet comparison, system effect, firmware impact |
 | [gnss-mosaic-x5-vs-um980.md](gnss-mosaic-x5-vs-um980.md) | Septentrio mosaic-X5 as an alternative GNSS receiver: datasheet comparison, system effect, firmware impact |
+| [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) | RTCM from SW Maps (Android NTRIP) over Bluetooth to UM980 COM2; replaces the radio |
 | [rtos-decision.md](rtos-decision.md) | Bare metal first, FreeRTOS later |
-| [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md) | W5500 Ethernet, `$PANDA` output for AgOpenWeb, RTCM in |
 | [web-config-server.md](web-config-server.md) | GPIO-toggled web config and diagnostics server |
+
+## On hold
+These plans are not part of the current build, but they are kept for later.
+
+| Plan | Topic |
+|---|---|
+| [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md) | W5500 Ethernet, `$PANDA` output for AgOpenWeb, RTCM in. SPI0 (GP16–21) stays reserved for it |

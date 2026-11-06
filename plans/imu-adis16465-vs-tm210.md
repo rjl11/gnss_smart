@@ -38,7 +38,7 @@ The clear gains are the **accelerometer** (8–14×), a full factory calibration
 - **Lost:** the magnetometer. The `nav_suite` AHRS sub-filter never runs, so ATTITUDE_ONLY mode relies on ARS (roll/pitch, yaw free). The current plan keeps the magnetometer off for the INS anyway ([inslib-nav-suite.md](inslib-nav-suite.md)).
 
 ## Firmware impact if switched
-- **Bus:** SPI1 (SPI0 is the W5500, [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)). Use a DR-pin GPIO interrupt that starts a DMA burst read. This frees UART0.
+- **Bus:** SPI1 (SPI0 is reserved for the W5500, which is on hold: [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)). Use a DR-pin GPIO interrupt that starts a DMA burst read. This frees UART0.
 - **Rate:** set `DEC_RATE` for 1000 Hz (or 500 Hz). 1000 Hz adds about 25 % to the strapdown cost, still far inside the budget in [rp2350-feasibility.md](rp2350-feasibility.md). The SPI load at 1 MHz burst is fine: about 20 B per sample → 160 kbit/s.
 - **Timestamps:** capture the DR edge on the Pico µs clock. This replaces the TM210 offset/drift mapping. Alternatively, drive the SYNC input from a PPS-locked clock, or put DR on the GNSS receiver's EVENT input.
 - **Data:** read delta-angle/delta-velocity and divide by dt for INSLIB's `gyr`/`acc`. This handles coning and sculling inside the sensor. Convert to the INSLIB FRD frame according to the axis marks on the ADIS case.

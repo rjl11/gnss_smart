@@ -1,5 +1,7 @@
 # Ethernet output with a W5500, compatible with AgOpenWeb
 
+> **Status: on hold** (2026-11-06). This is not part of the current build. The plan is kept for when wired Ethernet / AgOpenWeb output is added, and SPI0 (GP16–21) stays reserved for it.
+
 ## Idea
 Add a WIZnet W5500 Ethernet module on SPI so the device sends its position over wired UDP to [AgOpenWeb](https://github.com/AgOpenGPS-Official/AgOpenWeb) (and AgOpenGPS/AgIO) on the tractor network. BLE output stays as it is. Ethernet is an extra channel, not a replacement.
 
@@ -81,8 +83,8 @@ Pitfalls:
 
 ## RTCM over Ethernet
 - Path: UDP 2233 → ring buffer → PIO UART TX → UM980 **COM3**, locked to corrections only (a `CONFIG RXTYPE` command like the one used for COM2; check the exact syntax in the N4 manual).
-- The radio stays on COM2. Only one correction source should be active at a time. The diagnostics page shows which port has received bytes recently.
-- With this in place, AgOpenWeb's NTRIP client can replace the radio entirely.
+- Bluetooth RTCM from the phone (SW Maps) uses COM2 ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)). Only one correction source should be active at a time. The diagnostics page shows which port has received bytes recently.
+- With this in place, AgOpenWeb's NTRIP client can replace the phone as the correction source.
 
 ## Discovery
 - Nothing is needed for v1, because AgOpenWeb learns the GPS source from the first `$` datagram.
@@ -95,5 +97,5 @@ Pitfalls:
 ## Verification (when implementing)
 1. A PC on 192.168.5.x running `nc -ul 9999` (or Wireshark) receives `$PANDA` at 10 Hz with valid checksums.
 2. AgOpenWeb on the same network shows the position, RTK fixed, IMU heading and roll. Tilt and turn the unit, and check that the roll sign and heading direction match the display.
-3. Turn on AgOpenWeb's NTRIP client with the radio disconnected. RTCM bytes arrive on 2233, and the UM980 reaches RTK fixed.
+3. Turn on AgOpenWeb's NTRIP client with the phone's corrections off. RTCM bytes arrive on 2233, and the UM980 reaches RTK fixed.
 4. Pull the Ethernet cable while running. Core 1 filter timing is unaffected (bench replay from [rp2350-feasibility.md](rp2350-feasibility.md)), and output resumes when the cable is plugged back in.

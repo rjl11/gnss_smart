@@ -1,0 +1,75 @@
+# RTCM corrections from SW Maps (Android) over Bluetooth
+
+## Context
+The external correction radio on UM980 COM2 has been dropped. RTK corrections now come from **SW Maps** on an Android phone:
+- SW Maps connects to the device as a Bluetooth GNSS receiver (a "Generic NMEA" device, over Bluetooth LE or Classic) and reads our NMEA.
+- SW Maps runs its own NTRIP client, using the phone's mobile data.
+- It sends the RTCM it receives back to the device over the same Bluetooth link.
+
+This plan covers that link on the Pico 2 W (CYW43439 + BTstack) and the path from Bluetooth into the UM980. The NMEA output side was already planned in [rp2350-feasibility.md](rp2350-feasibility.md).
+
+## One Bluetooth link, both directions
+| Direction | Content | Rate |
+|---|---|---|
+| Device → phone | NMEA: GGA and RMC at 10 Hz, plus GST/GSA if cheap | ~1.5–2 kB/s |
+| Phone → device | RTCM3 from the NTRIP caster | ~1–3 kB/s (MSM4/MSM7, 4 constellations, 1 Hz) |
+
+Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary chunks that don't line up with frame boundaries, so the firmware has to reassemble the frames.
+
+## GGA to the caster
+- SW Maps forwards our GGA to the caster when "Send NMEA GGA to Caster" is on. Network/VRS casters need this; without GGA the receiver stays in float.
+- So **GGA must carry a real position as soon as the UM980 has a fix**, even before the INS is navigating. Until then, fall back to the UM980's own position.
+- SW Maps throttles how often it sends GGA to the caster, so our 10 Hz rate is fine.
+
+## Bluetooth profile
+- **First choice: BLE with the Nordic UART Service (NUS)** via BTstack (`pico_btstack_ble`), as already planned for the output.
+  - The TX characteristic (notify) carries NMEA out.
+  - The RX characteristic (write without response) carries RTCM in.
+  - **To verify:** that SW Maps' "Generic NMEA (Bluetooth LE)" driver finds a NUS device and writes RTCM to its RX characteristic. SW Maps' docs don't confirm this.
+- **Fallback: Bluetooth Classic SPP (Serial Port Profile).**
+  - SW Maps also supports Classic Bluetooth GNSS receivers, and this is the most common way Bluetooth RTK receivers work with it.
+  - The CYW43439 and BTstack support dual mode, so the Pico 2 W can offer SPP.
+  - Use it if SW Maps' BLE path doesn't send RTCM. The config page chooses between BLE and SPP.
+  - An ESP32-S3 has no Bluetooth Classic, so this fallback doesn't exist there ([esp32-s3-feasibility.md](esp32-s3-feasibility.md)).
+
+## Path into the UM980
+1. **BTstack receive callback (core 0) → ring buffer** (4 KB is several seconds of RTCM).
+2. **RTCM3 frame check:**
+   - Each frame is a 0xD3 preamble, a 10-bit length and a CRC-24Q.
+   - Forward only whole frames that pass the CRC. Count and drop bad ones.
+   - Note the message type of each frame for diagnostics.
+3. **PIO UART TX → UM980 COM2 at 115200 baud or faster.**
+   - Lock COM2 to corrections with `CONFIG RXTYPE COM2 RTCM`. This command can only be issued on COM1.
+   - COM2 was the radio's port, so this reuses that port and its lock.
+   - COM1 stays clean for commands and binary logs, and no hardware UART is needed (both are already taken).
+   - One PIO state machine is enough: TX only, no DMA needed at these rates.
+- **Rejected alternative:** writing RTCM frames into UART1 → COM1 between commands. It saves the PIO state machine, but mixes commands and corrections on one port.
+
+## Monitoring and failure behaviour
+- **Correction age and RTK status** come from BESTNAV/PVTSLN, which the UM980 parser already reads.
+- **If Bluetooth drops:**
+  1. Corrections stop.
+  2. After its correction-age timeout, the UM980 drops to float, then single.
+  3. The fix quality in our GGA follows automatically (and in `$PANDA`, once Ethernet is back from on hold).
+  4. The filter keeps running.
+- **Diagnostics page** ([web-config-server.md](web-config-server.md)):
+  - Bluetooth connected, and whether it's BLE or SPP.
+  - RTCM bytes and frames received, CRC errors, time since the last frame.
+  - Message types seen, e.g. 1005, 1074/1077, 1084/1087, 1094/1097, 1124/1127, 1230.
+  - Correction age as reported by the UM980.
+
+## Timing
+Everything runs on core 0, as laid out in [rtos-decision.md](rtos-decision.md). The filter on core 1 is unaffected. Bluetooth receive bursts are small (a few hundred bytes per second, in chunks).
+
+## Field notes
+- The phone must stay within Bluetooth range, so mount it in the cab, not in a pocket outside.
+- The phone needs mobile data for NTRIP.
+- Android battery optimisation can stop SW Maps in the background. Keep it in the foreground, or exempt it from battery optimisation.
+- Only one app can hold the Bluetooth link. SW Maps must be both the NMEA reader and the NTRIP client; a second NTRIP app can't share the connection.
+
+## Verification (when implementing)
+1. SW Maps connects over BLE as a Generic NMEA device and shows the device's position.
+2. With the NTRIP client on, RTCM frames are counted on the diagnostics page with zero CRC errors.
+3. The UM980 reaches RTK fixed, and correction age stays under 5 s.
+4. Turn Bluetooth off on the phone. Correction age rises, the fix drops to float and then single, and core 1 filter timing (bench replay from [rp2350-feasibility.md](rp2350-feasibility.md)) doesn't change.
+5. If step 1 or 2 fails over BLE, repeat everything over Classic SPP.

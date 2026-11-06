@@ -23,7 +23,7 @@ What that buys over bare `ins`:
 2. Optionally tune `suite.ars_cfg` / `suite.ahrs_cfg` / `suite.baro_cfg` before the first update.
 3. Loop: pop one IMU sample (plus any GNSS/baro that arrived) from the core 0 queue, build an `ins_measurements_t`, call `nav_suite_update()`. One call per TM210 sample, so 800 calls per second. The strapdown runs every call; the covariance prediction runs at `kalman_update_dt_sec` (20 Hz).
 4. After the first usable GNSS fix, and again after moving far (e.g. 50 km), call `nav_suite_set_magnetic_model_position(lat, lon, year)`.
-5. Every 100 ms, copy the outputs into a struct that core 0 reads (BLE, `$PANDA`, web page).
+5. Every 100 ms, copy the outputs into a struct that core 0 reads (BLE, web page, and `$PANDA` once Ethernet is back from on hold).
 
 ## Options for a tractor (AgOpenWeb) setup
 | `ins_options_t` field | Value | Why |
@@ -58,6 +58,8 @@ Zero `ins_measurements_t` every epoch. Set `is_valid` only on an epoch that carr
 GNSS and baro samples are attached to the next IMU epoch after they arrive on core 1; the delay fields carry how old they are.
 
 ## Outputs (10 Hz)
+`$PANDA` is the AgOpenWeb sentence sent over Ethernet, which is on hold ([ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)). For now, BLE NMEA is the only output.
+
 | Output | INSLIB call | Used by |
 |---|---|---|
 | Lat/lon/height | `ins` local position → `nav_suite_local_to_wgs84()`, height from `nav_suite_get_height_ellipsoid()` | `$PANDA`, BLE NMEA |

@@ -47,8 +47,8 @@ Both are single-antenna receivers. A dual-antenna variant (mosaic-H, UM982) woul
 - **Config:** Septentrio commands (`setSBFOutput`, `setDataInOut`, `setPVTMode`) instead of Unicore `CONFIG`/`LOG`.
 - **Ports** ([rp2350-feasibility.md](rp2350-feasibility.md) layout):
   - UART1 stays the receiver's SBF output and command port. It could run faster, up to 4 Mbps.
-  - Radio RTCM goes into a second mosaic UART with input locked to RTCM via `setDataInOut`.
-  - A spare mosaic UART takes RTCM from the Pico's PIO TX (AgOpenWeb NTRIP over the W5500).
+  - RTCM from the phone (SW Maps over Bluetooth, forwarded by the Pico's PIO TX) goes into a second mosaic UART with input locked to RTCM via `setDataInOut`.
+  - A spare mosaic UART takes RTCM from the Pico's PIO TX (AgOpenWeb NTRIP over the W5500, on hold).
   - Optional: use the mosaic's own Ethernet and NTRIP client (needs a PHY on the carrier board), with SD logging over SDIO for field data.
 - **Fix quality output:** map the SBF `Mode` field (RTK fixed/float, DGNSS, standalone) to the GGA quality field. `nav_suite` mode handling is unchanged.
 - **Power:** budget 1.1 W peak at 3.3 V (≈330 mA) instead of ~150 mA.

@@ -38,29 +38,36 @@ That totals roughly **5–10 % of one core**. The second core is free for parsin
 ## Serial port layout (2 hardware UARTs is enough)
 A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It does mean two firmwares, a framing protocol and a second chip to keep in sync. The same result is available on one chip:
 
-1. **Send RTCM3 straight to the UM980.** The UM980 has three identical UARTs, COM1–COM3 (Unicore N4 manual §4). Wire the radio's TX to UM980 COM2 RX and lock that port with `CONFIG RXTYPE COM2 RTCM`, so it only accepts corrections and ignores commands. No MCU UART is involved. The firmware can still watch correction age and RTK status in the UM980's PVTSLN/BESTNAV output.
-2. **Position output goes over the Pico 2 W's on-board Bluetooth and a W5500 Ethernet module on SPI**, so it needs no UART. See "Bluetooth output" below and [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md) (UDP `$PANDA` for AgOpenWeb).
+1. **RTCM3 comes from the phone over Bluetooth and goes to its own UM980 port.**
+   - The UM980 has three identical UARTs, COM1–COM3 (Unicore N4 manual §4).
+   - SW Maps on Android runs the NTRIP client and sends RTCM over the same Bluetooth link that carries our NMEA. There is no correction radio.
+   - The Pico checks each RTCM frame and forwards it from a PIO UART TX to UM980 COM2.
+   - Lock COM2 with `CONFIG RXTYPE COM2 RTCM`, so it only accepts corrections and ignores commands.
+   - The firmware watches correction age and RTK status in the UM980's PVTSLN/BESTNAV output.
+   - Details: [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md).
+2. **Position output goes over the Pico 2 W's on-board Bluetooth**, so it needs no UART. See "Bluetooth output" below. A W5500 Ethernet module on SPI (UDP `$PANDA` for AgOpenWeb) is **on hold**: its plan is kept in [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md), and its pins stay reserved.
 3. **PIO UARTs are spare capacity.** The RP2350 has 3 PIO blocks with 12 state machines in total. The CYW43439 radio uses one state machine plus a DMA channel for its SPI link (internal pins GPIO23/24/25/29), which leaves 11. The Pico SDK's `pio_uart_tx` / `pio_uart_rx` give one UART per state machine, receiving via DMA, at speeds well beyond 921600 baud. Use them if more serial ports are needed later.
 
 | Port | Device | Direction | Baud |
 |---|---|---|---|
 | UART0 (hardware) | TM210 IMU | RX raw data, TX status request | 921600 |
 | UART1 (hardware) | UM980 COM1 | RX binary logs, TX config | 460800–921600 |
-| On-board CYW43439 (BLE) | Phone / PC | position output 10 Hz | — |
-| SPI0 (GP16–21) | W5500 Ethernet | UDP `$PANDA` out 10 Hz, RTCM in | ~30 MHz SPI |
-| PIO UART TX | UM980 COM3 | RTCM from Ethernet (AgOpenWeb NTRIP) | 115200+ |
-| none (direct wire) | Radio → UM980 COM2 | RTCM3 | radio baud |
+| On-board CYW43439 (BLE, or Classic SPP as fallback) | Phone (SW Maps) | position output 10 Hz, RTCM in | — |
+| PIO UART TX | UM980 COM2 | RTCM from the phone (Bluetooth) | 115200+ |
+| SPI0 (GP16–21) | W5500 Ethernet (on hold, pins reserved) | UDP `$PANDA` out 10 Hz, RTCM in | ~30 MHz SPI |
+| PIO UART TX | UM980 COM3 (on hold, with Ethernet) | RTCM from Ethernet (AgOpenWeb NTRIP) | 115200+ |
 | GPIO interrupt | UM980 PPS | time sync | — |
 | I2C1 (e.g. GP2/GP3) | BMP581 | — | — |
 
 Notes:
 - The manual says COM1 should be kept for firmware upgrades. With COM1 on the MCU, firmware upgrades of the UM980 go through the RP2350, or use COM3 for the MCU and leave COM1 on a header.
 - `CONFIG RXTYPE` can only be issued on COM1.
-- If RTCM must go through the MCU (to log it, or to choose between several sources), put the radio on a PIO UART RX and forward the bytes to UM980 COM2 from a PIO TX. That's still one chip.
+- All RTCM now passes through the MCU (Bluetooth → PIO TX → COM2), so it can be logged or checked for free.
 
-## Bluetooth output (on-board CYW43439)
-- **Profile:** BLE with the Nordic UART Service (NUS), a widely supported "serial over BLE" profile. Apps such as nRF Connect and Serial Bluetooth Terminal read it on iOS and Android. The Pico SDK supports it through BTstack (`pico_btstack_ble`). BTstack also does Bluetooth Classic SPP if Windows/Android serial-port tools are wanted later.
+## Bluetooth link: output and RTCM in (on-board CYW43439)
+- **Client:** SW Maps on Android connects as to a Bluetooth GNSS receiver. It reads our NMEA and sends RTCM from its NTRIP client back over the same link. Our GGA must carry a real position as soon as the UM980 has a fix, because SW Maps forwards it to the caster. See [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md).
+- **Profile:** BLE with the Nordic UART Service (NUS), a widely supported "serial over BLE" profile. The Pico SDK supports it through BTstack (`pico_btstack_ble`). If SW Maps' BLE driver doesn't send RTCM to NUS, fall back to Bluetooth Classic SPP, which BTstack also supports on the CYW43439.
 - **Payload:** NMEA GGA/RMC at 10 Hz is about 150 B per frame, so 1.5 kB/s, which fits easily in BLE throughput. Request a larger MTU (e.g. 247) so each sentence fits in one notification.
 - **CPU and timing:** run the CYW43 driver and BTstack on core 0 (`pico_cyw43_arch_threadsafe_background` or a FreeRTOS build) and the INSLIB filter on core 1. Bluetooth interrupts then don't disturb the filter's timing. RAM cost is in the tens of KB, a small share of the 520 KB.
 - **Antenna:** keep metal and the GNSS antenna away from the board edge that carries the Pico 2 W's antenna. Bluetooth and the GNSS L-band are far apart in frequency, but keep the boards physically separated.
-- **Later option:** the Wi-Fi radio could run an NTRIP client, giving RTCM over Wi-Fi or a phone hotspot instead of the external radio. It would forward corrections to UM980 COM2 from a PIO TX, or from UM980 COM3.
+- **Later option (not needed for now):** an NTRIP client on the Pico's own Wi-Fi, using a phone hotspot. This would remove the need to keep SW Maps running. It would feed the same PIO TX → COM2 path.

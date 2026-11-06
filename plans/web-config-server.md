@@ -1,7 +1,7 @@
 # Web server for configuration and diagnostics (Pico 2 W, GPIO toggle)
 
 ## Idea
-Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configuration and diagnostics. It's only on when a GPIO says so, so normal operation keeps the radio quiet, the power low and the filter undisturbed.
+Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configuration and diagnostics. It's only on when a GPIO says so, so normal operation keeps Wi-Fi off, the power low and the filter undisturbed. Bluetooth stays on all the time, because it carries the RTCM corrections from SW Maps ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
 
 ## GPIO toggle
 - One free header GPIO (e.g. GPIO22) with the internal pull-up, plus a switch or jumper to GND. Low = web mode on.
@@ -11,7 +11,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 
 ## Network mode
 - **Access point** by default (`cyw43_arch_enable_ap_mode`) with WPA2 and a fixed address (192.168.4.1). This works in the field with no router. It needs the small DHCP server from pico-examples (`pico_w/wifi/access_point/dhcpserver`), plus optionally its DNS server so any hostname resolves to the device.
-- **Over Ethernet** (later option): the same pages could also be served over the W5500 (ioLibrary has a small HTTP server), so the device can be configured from the tractor network without Wi-Fi.
+- **Over Ethernet** (later option, on hold with the W5500): the same pages could also be served over the W5500 (ioLibrary has a small HTTP server), so the device can be configured from the tractor network without Wi-Fi.
 - **Station mode** (join an existing network) as an option later. It's the same mode NTRIP over Wi-Fi would need, so it can share that code.
 - SSID derived from the board's unique ID (e.g. `gnss-smart-1A2B`). Default password printed on a label or set over USB; changeable from the web page.
 
@@ -19,7 +19,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - lwIP in `NO_SYS=1` mode via `pico_cyw43_arch_lwip_threadsafe_background`. This fits the bare-metal layout in [rtos-decision.md](rtos-decision.md): everything network-related runs on core 0, the filter stays alone on core 1.
 - HTTP server: the Pico SDK's `pico_lwip_http` (lwIP httpd). Static pages are compiled into flash with `makefsdata`. Dynamic data comes from a few CGI/POST handlers returning JSON.
 - Keep the page small (one HTML file with inline JS/CSS, a few tens of KB). Live values are polled from a JSON endpoint at 1–2 Hz; a WebSocket is not needed at first.
-- BLE and Wi-Fi can run together on the CYW43439, but they share airtime and RAM. Simplest first version: keep BLE output running in web mode and measure; if it struggles, drop BLE to a lower rate while web mode is on.
+- BLE and Wi-Fi can run together on the CYW43439, but they share airtime and RAM. Bluetooth must keep running in web mode, because it carries the RTCM corrections. Measure it: if it struggles, lower the NMEA output rate while web mode is on, but never drop the RTCM input.
 - If FreeRTOS is added later for NTRIP, the web server moves into its own task on core 0 with no change to the handlers.
 
 ## Diagnostics page (read-only)
@@ -27,14 +27,15 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - Per-sensor: measured rate (IMU 800 Hz, baro 100 Hz, GNSS 20 Hz), packets received, checksum/framing errors, UART overruns, time since last sample.
 - GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset.
 - Filter: mode (aligning / navigating), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
-- Ethernet: link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233, active correction source (radio on COM2 or Ethernet on COM3).
+- Corrections: Bluetooth connected (BLE or SPP), RTCM bytes and frames received from SW Maps, CRC errors, time since the last frame, message types seen ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
+- Ethernet (on hold): link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233.
 - CPU: core 1 worst-case and mean time per 1.25 ms IMU tick (DWT cycle counter), core 0 load, free stack/heap.
 - Optional: UM980 command passthrough (send a command, show the reply) for debugging.
 
 ## Configuration page (write)
 - Lever arms (IMU → GNSS antenna), IMU mounting rotation, filter tuning presets.
-- Output: rate, BLE device name, message format.
-- Ethernet: IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999), output sentence (`$PANDA` by default). See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
+- Output: rate, Bluetooth device name, BLE (NUS) or Classic SPP, message format.
+- Ethernet (on hold): IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999), output sentence (`$PANDA` by default). See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
 - Sensor setup: UART baud rates, UM980 log set (re-sent at boot).
 - Wi-Fi: SSID, password, AP vs station.
 - Buttons: save, revert to defaults, reboot.
