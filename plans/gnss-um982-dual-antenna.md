@@ -58,14 +58,14 @@ Related:
   - Mounted across the cab (left → right), `baseline_yaw_b` is +90°.
 - **Lever arm:** `gnss_leverarm_b` in `ins_options_t` is ANT1's, because BESTNAV is the master antenna position.
 - **Ports: no change.**
-  - UART1 ↔ COM2 at 460800 carries commands, binary logs out and RTCM in.
-  - COM1 is the module's USB-C port, left for a PC. COM3 is not connected, except on the Zero 2 W companion, which uses it as described in [gnss-um980-config.md](gnss-um980-config.md). All three are set to 460800.
+  - UART1 ↔ COM1 at 460800 carries commands, binary logs out and RTCM in.
+  - COM3 is the module's USB-C port, left for a PC. The COM2 pins are not connected, except on the Zero 2 W companion, which uses them as described in [gnss-um980-config.md](gnss-um980-config.md). All three are set to 460800.
   - No port is ever locked (`CONFIG RXTYPE` is never sent). PPS goes to the same GPIO.
-- **Ready-made modules, same connections.** The UM980 and the UM982 both come on ready-made modules with the same connections: USB-C (COM1), COM2 RX/TX, COM3 RX/TX, PPS, 5 V and GND. The Pico wiring is therefore identical for both, and swapping receivers is a plug change, not a board change. The UM982 module adds a second antenna connector (ANT2).
+- **Ready-made modules, same connections.** The UM980 and the UM982 both come on ready-made modules with the same connections: USB-C (COM3, through a CH340 bridge), COM1 RX/TX and COM2 RX/TX on pins, PPS, 5 V and GND. The UM980 module's mapping is assumed to match the UM982's; check it once. The Pico wiring is therefore identical for both, and swapping receivers is a plug change, not a board change. The UM982 module adds a second antenna connector (ANT2).
   - The bare UM982 (48-pin LGA) is not pin-compatible with the bare UM980 (54-pin LGA) (HW Table 1-1, §2.1), but the modules hide that. The pin-level rules in HW §3 (V_BCKP, BIF pull-ups, antenna feed, power-on ramp) are the module maker's job.
-  - The modules have no RESET_N pin, so the firmware can't hard-reset a stuck receiver. It uses `RESET` over COM2, and power-cycling the 5 V would need a load switch (open question).
+  - The modules have no RESET_N pin, so the firmware can't hard-reset a stuck receiver. It uses `RESET` over COM1, and power-cycling the 5 V would need a load switch (open question).
 - **Power:** the module takes 5 V. The bare UM982 draws 180 mA typical and **300 mA maximum** at 3.3 V, 600 mW (HW Table 2-4), against 480 mW typical for the UM980. The 600 mW figure is for 10 Hz PVT + 10 Hz RTK + 10 Hz heading, so at 20 Hz expect more. The module's regulator and the active antennas add to that, so measure the 5 V current of each module (estimate, not yet measured).
-- **Logic level:** check on the bench that the module's COM2 TX and PPS swing 3.3 V, not 5 V, before wiring them to Pico GPIO.
+- **Logic level:** check on the bench that the module's COM1 TX and PPS swing 3.3 V, not 5 V, before wiring them to Pico GPIO.
 - **Slave antenna signals:** ANT2 tracks fewer signals than ANT1: BDS B1I/B2I/B3I, GPS L1 C/A/L2C, GLONASS L1/L2, Galileo E1/E5b, QZSS L1/L2 (HW Table 1-1). The slave antenna has no L5/E5a. That matters for heading only; position comes from ANT1.
 
 ## Detection and configuration (core 0, `gnss_um980_cfg` extended)
@@ -76,16 +76,16 @@ The state machine in [gnss-um980-config.md](gnss-um980-config.md) stays as it is
 
 | Item | UM980 | UM982 |
 |---|---|---|
-| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 4 5` (default). Fall back to `3 6` if 20 Hz isn't reached and the build is ≥ 10979 |
+| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979 (as the module ships, see the bench results), else `4 5`. Confirm 20 Hz on the bench |
 | Heading mode | — | `CONFIG HEADING VARIABLELENGTH` |
 | Heading reliability | — | default (3), not sent |
 | Heading offset | — | not sent (stays 0). The firmware applies `baseline_yaw_b` itself |
-| Logs | `BESTNAVB COM2 0.05`, `STADOPB COM2 1` | the same, plus `UNIHEADINGB COM2 0.05` |
+| Logs | `BESTNAVB COM1 0.05`, `STADOPB COM1 1` | the same, plus `UNIHEADINGB COM1 0.05` |
 | Everything else | as in the UM980 plan | same |
 
 3. **Fast-path check:** on a UM982, the `CONFIG` reply must also contain the HEADING VARIABLELENGTH line, and `UNILOGLIST` must show three logs (five with the Zero 2 W companion).
 4. **Provision:** the same steps, with the UM982 rows. `CONFIG HEADING VARIABLELENGTH` goes with the step 4 settings (after the signal-group reboot, before `SAVECONFIG`). `UNIHEADINGB` goes with the logs in step 6.
-5. **Bandwidth:** UNIHEADINGB is about 24 + 44 + 4 B. At 20 Hz that is about 1.4 kB/s, so COM2 TX carries about 4.5 kB/s in total, about 10 % of 460800.
+5. **Bandwidth:** UNIHEADINGB is about 24 + 44 + 4 B. At 20 Hz that is about 1.4 kB/s, so COM1 TX carries about 4.5 kB/s in total, about 10 % of 460800.
 6. **Where the offset is stored:** `baseline_yaw_b` is an install setting, stored in Pico flash and editable on the web config page ([web-config-server.md](web-config-server.md)). It is not stored in the receiver, so swapping a receiver doesn't lose it.
 
 ## VARIABLELENGTH and the mount
@@ -122,6 +122,32 @@ The same as for the UM980 ([rtos-decision.md](rtos-decision.md)):
 - On core 0: UNIHEADINGB parsing, the baseline gate and the offset.
 - On core 1: nothing new except reading `m.yaw` and the per-model `automotive_mode` choice at init.
 
+## Bench results (2026-11-06, UM982 module on a PC over USB-C)
+The module was connected to a PC through its USB-C port (CH340 USB-serial bridge, Windows COM10). Only read-only queries and one-shot logs were sent, and nothing was saved. The antennas weren't connected or had no sky view: BESTNAV and UNIHEADING reported `INSUFFICIENT_OBS`, so heading, rate and fix tests are still open.
+
+- **Identity:** `"UM982","R4.10Build18975"`, product type 17. Build 18975 is above every build limit in this plan (7650 for `MODE ROVER`, 10979 for 20 Hz on SG 3 6).
+- **The USB-C port is COM3.** A one-shot `VERSIONA COM3` arrived on the USB port, and `VERSIONA COM1` / `VERSIONA COM2` didn't. The module's only active log is `KSXT COM3 0.1`, and that is what streams on the USB port. The user confirmed that the module's two UART pin pairs are **COM1 and COM2**. The port assignment in all plans follows from this: Pico on COM1, Zero 2 W companion on COM2, USB-C (COM3) left for a PC.
+- **Command replies confirmed:**
+  - OK: `$command,<cmd>,response: OK*cs`.
+  - Error: `$command,<cmd>,response: PARSING FAILED GRAMMAR ERROR,<token>*cs`, for example for `VERSIONA COM1 ONCE`. A one-shot log is requested as `<LOG>A <port>` with no trigger word.
+- **`CONFIG CMDFORMAT 0`** is listed on the UM982, although the manual doesn't list the command for the UM980. Leave it at 0 (no checksum).
+- **As the module ships** (`CONFIG` and `MODE` replies):
+
+| Item | As shipped | Target in this plan |
+|---|---|---|
+| Signals | `SIGNALGROUP 3 6` | see the target table: `3 6` on build ≥ 10979 |
+| Heading | `HEADING VARIABLELENGTH`, `HEADING RELIABILITY 3` | already matches |
+| Mode | `MODE ROVER UAV DEFAULT` | `MODE ROVER SURVEY` |
+| PPS | `PPS DISABLE` | `PPS ENABLE GPS POSITIVE 100000 1000 0 0` |
+| Ports | COM1, COM2, COM3 at 460800 | already matches |
+| Logs | `KSXT COM3 0.1` | `UNLOG`, then BESTNAVB, STADOPB, UNIHEADINGB on the Pico's port |
+| Other | `ANTENNA POWERON`, `SBAS DISABLE`, `PPP ENABLE E6-HAS`, `RTK TIMEOUT 60`, `ANTIJAM AUTO` | not touched by this plan |
+
+- **Consequences:**
+  - A new module fails the fast-path check (mode, PPS, logs) and gets provisioned on first boot, as intended.
+  - `PSRVELDRPOS` doesn't appear in the `CONFIG` reply. Check on the bench whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG`. If it only lists non-default items, the fast-path text match must allow for that.
+  - The module ships at 460800 on every port, so detection finds it on the first baud tried.
+
 ## Verification (bench, when hardware is available)
 1. **Detection:** a UM980 and a UM982 on the same board (or two carriers) are each identified correctly. The UM980 path is unchanged: same commands and same `UNILOGLIST`.
 2. **Provisioning:**
@@ -143,5 +169,5 @@ The same as for the UM980 ([rtos-decision.md](rtos-decision.md)):
    - The heading latency against BESTNAV in the same epoch.
    - VARIABLELENGTH against TRACTOR behaviour.
    - The 5 V current of each module at 20 Hz positioning + heading (the datasheet's 600 mW is for 10 Hz).
-   - The module's COM2 and PPS logic level (3.3 V expected).
-   - Whether SG 4 5 reaches 20 Hz.
+   - The module's COM1 and PPS logic level (3.3 V expected).
+   - Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together.

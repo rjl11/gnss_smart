@@ -32,7 +32,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - Corrections: Bluetooth connected (BLE or SPP), RTCM bytes and frames received from SW Maps, CRC errors, time since the last frame, message types seen ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
 - Ethernet (on hold): link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233.
 - CPU: core 1 worst-case and mean time per 1.25 ms IMU tick (DWT cycle counter), core 0 load, free stack/heap.
-- Optional: UM980 command passthrough (send a command, show the reply) for debugging. It goes through the COM2 TX arbiter between RTCM frames. Block `CONFIG RXTYPE`, so a port can't be locked by mistake.
+- Optional: UM980 command passthrough (send a command, show the reply) for debugging. It goes through the COM1 TX arbiter between RTCM frames. Block `CONFIG RXTYPE`, so a port can't be locked by mistake.
 
 ## Configuration page (write)
 - Lever arms (IMU → GNSS antenna), IMU mounting rotation, filter tuning presets.

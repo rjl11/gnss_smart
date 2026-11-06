@@ -2,22 +2,22 @@
 
 ## Context
 Can a Raspberry Pi Zero 2 W run this project? It has plenty of CPU: four Cortex-A53 cores at 1 GHz with hardware double precision, and 512 MB of RAM. It also has 2.4 GHz Wi-Fi, Bluetooth 4.2 (BLE and Classic) and one micro-USB OTG port. On its own it is still a poor fit:
-- **Not enough UARTs.** Only one full PL011 UART and a mini UART reach the header, and onboard Bluetooth normally uses the PL011. The TM210 at 921600 and UM980 COM2 can't both get a usable hardware UART.
+- **Not enough UARTs.** Only one full PL011 UART and a mini UART reach the header, and onboard Bluetooth normally uses the PL011. The TM210 at 921600 and UM980 COM1 can't both get a usable hardware UART.
 - **Timestamp jitter.** User space sees UART bytes only after tty buffering, so the timing jitter is in milliseconds. The design needs ISR-level capture times ([rp2350-feasibility.md](rp2350-feasibility.md)).
 - **Slow boot and fragile storage.** Linux takes tens of seconds to boot, and the SD card is at risk when power is cut.
 
-This plan asks the same question as [esp32-s3-wifi-companion.md](esp32-s3-wifi-companion.md), but with a Zero 2 W as the companion. A plain Pico 2 keeps the sensors and INSLIB, and the Zero joins over USB as a Linux companion. Two extra wires go straight from the UM980 to the Zero: COM3, and the PPS signal for a stratum 1 NTP server. The Zero also drives the Pico's SWD port, so the first hardware build doubles as the debug rig.
+This plan asks the same question as [esp32-s3-wifi-companion.md](esp32-s3-wifi-companion.md), but with a Zero 2 W as the companion. A plain Pico 2 keeps the sensors and INSLIB, and the Zero joins over USB as a Linux companion. Two extra wires go straight from the UM980 to the Zero: COM2, and the PPS signal for a stratum 1 NTP server. The Zero also drives the Pico's SWD port, so the first hardware build doubles as the debug rig.
 
 No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come from Raspberry Pi's public specs and should be checked against the brief once it is added.
 
 ## Answer: yes, with each board owning whole features
-- **The Pico owns the sensors, timing and filter:** the TM210, UM980 COM2, the BMP581, PPS capture and INSLIB.
+- **The Pico owns the sensors, timing and filter:** the TM210, UM980 COM1, the BMP581, PPS capture and INSLIB.
 - **The Zero owns networking, storage, time service and debugging:** the Bluetooth link to SW Maps, NTRIP over Wi-Fi, RTCM into the UM980, web config, raw logging, NTP, SWD and firmware updates.
 - **The USB link to the Pico needs no UART** and plays no part in the timing. Every capture timestamp is still taken on the Pico.
 
 ## Recommended split
 - **Plain Pico 2 (no W):**
-  - TM210 on UART0, UM980 COM2 on UART1, BMP581 on I2C1, PPS on a GPIO interrupt. SPI0 (GP16–21) stays reserved for the W5500, which is on hold ([ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)).
+  - TM210 on UART0, UM980 COM1 on UART1, BMP581 on I2C1, PPS on a GPIO interrupt. SPI0 (GP16–21) stays reserved for the W5500, which is on hold ([ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)).
   - Core 1 runs only the filter, as in [rtos-decision.md](rtos-decision.md).
   - Core 0 runs UART DMA, the parsers, the BMP581 driver, the `um980_tx` arbiter (commands only, see below) and TinyUSB. TinyUSB replaces BTstack and the CYW43 driver, which means less code and fewer interrupts on core 0.
   - The Pico still configures the UM980 itself at boot ([gnss-um980-config.md](gnss-um980-config.md)), and it is the only device that sends it commands.
@@ -31,14 +31,14 @@ No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come fr
   - SWD flashing and debugging of the Pico, plus `picotool` updates in the field.
 - **Why a plain Pico 2:** the Zero has both BLE and Classic Bluetooth, so the CYW43439 adds nothing. Keep the Pico 2 W only if phone output must work during the Zero's boot or after a Zero failure (see "Power, boot and failure").
 
-### RTCM path: straight into COM3, not through the Pico
-- NTRIP over Wi-Fi, or SW Maps over BLE/SPP, arrives at the Zero. From there it goes out the Zero's UART TX (GPIO14) into **UM980 COM3 RX**.
-- **No port is locked.** `CONFIG RXTYPE` is never sent, because of the risk of bricking. COM3 stays at the default `AUTO` and recognises RTCM by itself, as COM2 does in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md).
-- **The Zero writes only RTCM:** whole RTCM3 frames that pass CRC-24Q. It never writes command lines, so the receiver has a single configuring device, the Pico on COM2.
+### RTCM path: straight into COM2, not through the Pico
+- NTRIP over Wi-Fi, or SW Maps over BLE/SPP, arrives at the Zero. From there it goes out the Zero's UART TX (GPIO14) into **UM980 COM2 RX**.
+- **No port is locked.** `CONFIG RXTYPE` is never sent, because of the risk of bricking. COM2 stays at the default `AUTO` and recognises RTCM by itself, as COM1 does in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md).
+- **The Zero writes only RTCM:** whole RTCM3 frames that pass CRC-24Q. It never writes command lines, so the receiver has a single configuring device, the Pico on COM1.
 - **One correction source at a time.** The daemon chooses between NTRIP and SW Maps.
-- **On the Pico,** the `um980_tx` arbiter on COM2 now carries only commands. The Pico still watches correction age and RTK status in BESTNAVB.
+- **On the Pico,** the `um980_tx` arbiter on COM1 now carries only commands. The Pico still watches correction age and RTK status in BESTNAVB.
 - **Corrections keep flowing** while the Pico reboots, updates its firmware or is halted by a debugger.
-- **Without the Zero** (a Pico 2 W build), RTCM goes back to COM2 through the Pico, as in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md).
+- **Without the Zero** (a Pico 2 W build), RTCM goes back to COM1 through the Pico, as in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md).
 
 ## USB link (Pico ↔ Zero)
 - **Roles:**
@@ -50,7 +50,7 @@ No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come fr
   | Interface | Use |
   |---|---|
   | CDC 0 | The framed link (below) |
-  | CDC 1 | Transparent passthrough of the Pico's UM980 link (COM2), for UPrecise sessions from the Zero. Receiver firmware upgrades go over the module's own USB-C port (COM1) from a PC, as in [rp2350-feasibility.md](rp2350-feasibility.md) |
+  | CDC 1 | Transparent passthrough of the Pico's UM980 link (COM1), for UPrecise sessions from the Zero. Receiver firmware upgrades are out of scope: they are done with UPrecise on a Windows PC over the module's USB-C (COM3), as in [rp2350-feasibility.md](rp2350-feasibility.md) |
   | Reset interface (as `pico_stdio_usb` provides it) | `picotool` on the Zero reboots the Pico into BOOTSEL and loads a UF2 |
 
 - **Framing:** reuse the COBS frames from [esp32-s3-wifi-companion.md](esp32-s3-wifi-companion.md): a type byte, a sequence number and a CRC-16, with the `HELLO`, `POS`, `DIAG`, `CFG_GET`/`CFG_SET`/`CFG_ACK` and `HEARTBEAT` types. Add these:
@@ -60,7 +60,7 @@ No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come fr
   | `NMEA` | Pico → Zero | ready-made GGA/RMC at 10 Hz, forwarded unchanged to SW Maps |
   | `RAW` (optional) | Pico → Zero | TM210, UM980 and BMP581 samples with their Pico capture timestamps, for logging and replay |
 
-  No RTCM type is needed, because RTCM goes straight to COM3. The CRC stays: the link can be unplugged or reset in the middle of a frame.
+  No RTCM type is needed, because RTCM goes straight to COM2. The CRC stays: the link can be unplugged or reset in the middle of a frame.
 - **Bandwidth (estimate, not yet measured):**
   - `POS`, `NMEA` and `DIAG`: about 3 kB/s
   - `RAW`: about 50 kB/s. That is TM210 raw data at 39.2 kB/s ([rp2350-feasibility.md](rp2350-feasibility.md)) plus GNSS and baro.
@@ -70,15 +70,15 @@ No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come fr
 ## Timing
 - **All capture timestamps stay on the Pico,** taken in the ISR or DMA-complete handler and from PPS. USB and Linux jitter affect only output latency, never the filter.
 - **`POS` carries the GNSS time of validity,** so a consumer can compensate for latency. USB and the daemon add a few ms (estimate, not yet measured).
-- **The two clocks need no sync for navigation.** The Zero's own time comes from COM3 and PPS (below), not from the Pico.
+- **The two clocks need no sync for navigation.** The Zero's own time comes from COM2 and PPS (below), not from the Pico.
 
 ## Stratum 1 NTP server on the Zero
 - **Why a direct path from the UM980:** NTP keeps working while the Pico reboots or is being debugged, and USB latency stays out of the time path.
-- **COM3 ↔ Zero UART, both directions:**
-  - UM980 COM3 TX → Zero RXD (GPIO15) carries NMEA time.
-  - Zero TXD (GPIO14) → COM3 RX carries RTCM only (see the RTCM path).
-  - COM3 stays at 460800, as [gnss-um980-config.md](gnss-um980-config.md) sets it.
-  - Through COM2, the Pico enables `GPRMC COM3 1` and `GPZDA COM3 1`, giving UTC date and time once a second. That is about 0.2 kB/s out, against 1–3 kB/s of RTCM in (estimate).
+- **COM2 ↔ Zero UART, both directions:**
+  - UM980 COM2 TX → Zero RXD (GPIO15) carries NMEA time.
+  - Zero TXD (GPIO14) → COM2 RX carries RTCM only (see the RTCM path).
+  - COM2 stays at 460800, as [gnss-um980-config.md](gnss-um980-config.md) sets it.
+  - Through COM1, the Pico enables `GPRMC COM2 1` and `GPZDA COM2 1`, giving UTC date and time once a second. That is about 0.2 kB/s out, against 1–3 kB/s of RTCM in (estimate).
 - **UART choice on the Zero:**
   - `dtoverlay=miniuart-bt` moves Bluetooth to the mini UART, which leaves the PL011 (`/dev/ttyAMA0`) for the GNSS with a fixed core clock.
   - The mini UART's 8-byte FIFO is a poor fit for 460800.
@@ -132,8 +132,8 @@ The Zero drives the Pico's SWD port, so the first hardware build needs no separa
 | Signal | From | To |
 |---|---|---|
 | USB D+, D−, VBUS, GND | Zero OTG port (host) | Pico USB (device) |
-| UM980 COM3 TX → Zero RX | UM980 COM3 TX | Zero GPIO15 (RXD, PL011) |
-| Zero TX → UM980 COM3 RX (RTCM only) | Zero GPIO14 (TXD) | UM980 COM3 RX |
+| UM980 COM2 TX → Zero RX | UM980 COM2 TX | Zero GPIO15 (RXD, PL011) |
+| Zero TX → UM980 COM2 RX (RTCM only) | Zero GPIO14 (TXD) | UM980 COM2 RX |
 | PPS | UM980 PPS | Pico GPIO interrupt and Zero GPIO18 |
 | SWD | Pico SWCLK / SWDIO | Zero GPIO25 / GPIO24 (check) |
 | Reset (optional) | Zero GPIO | Pico RUN |
@@ -150,7 +150,7 @@ Check the Pico pins against the final pin map. Already used: I2C1 on GP2/GP3, GP
 | Filter isolation | radio stack shares core 0 | radio on a separate chip | radio and networking on a separate board |
 | Networking software | lwIP and BTstack by hand | ESP-IDF | full Linux: BlueZ, NTRIP, web server, gpsd |
 | Bluetooth Classic SPP fallback | yes | no | yes |
-| RTCM path | through the Pico into COM2 | through the Pico into COM2 | Zero straight into COM3 |
+| RTCM path | through the Pico into COM1 | through the Pico into COM1 | Zero straight into COM2 |
 | Pico firmware update and debug | separate probe | separate probe (SWD from the S3 not checked) | SWD and GDB from the Zero over Wi-Fi, `picotool` |
 | Raw logging | needs an SD card on the Pico | limited | to SD or a USB stick on the Zero |
 | Power draw | lowest | moderate | highest |
@@ -184,7 +184,7 @@ The costs are a Linux image to maintain, 20–40 s before wireless output, read-
 1. **Link soak test:** 1 h of `POS` and `NMEA`, plus `RAW` at full rate. Expect zero CRC errors and no missing sequence numbers.
 2. **Zero failure:** unplug or reboot the Zero mid-run. The Pico's filter timing (the bench replay from [rp2350-feasibility.md](rp2350-feasibility.md)) is unaffected, and the link recovers when the Zero re-enumerates the Pico.
 3. **Corrections:**
-   - RTCM from an NTRIP caster over Wi-Fi goes from the Zero's UART into COM3, and the receiver reaches RTK fixed.
+   - RTCM from an NTRIP caster over Wi-Fi goes from the Zero's UART into COM2, and the receiver reaches RTK fixed.
    - Repeat with SW Maps over BLE.
    - Halt the Pico with GDB: RTK fixed holds, because corrections don't pass through the Pico.
 4. **Firmware update:** `picotool` on the Zero updates the Pico over USB.
@@ -198,6 +198,6 @@ The costs are a Linux image to maintain, 20–40 s before wireless output, read-
    - `chronyc sources` shows PPS selected (`*`) with an offset of a few µs.
    - A Wi-Fi client syncs at stratum 2.
    - Rebooting the Pico doesn't disturb chrony.
-   - `UNILOGLIST` shows the two COM3 NMEA logs, and `CONFIG` shows no RXTYPE lock.
+   - `UNILOGLIST` shows the two COM2 NMEA logs, and `CONFIG` shows no RXTYPE lock.
 7. **Power cuts:** cut power 50 times during logging. Expect no filesystem damage.
 8. **Replay:** a `RAW` log replayed through the host INSLIB `replay` matches the on-device output.

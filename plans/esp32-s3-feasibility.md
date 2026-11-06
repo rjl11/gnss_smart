@@ -21,7 +21,7 @@ The workload is the same as in the other studies:
 - BMP581 barometer at 100 Hz on I2C
 - 10 Hz output over BLE (Nordic UART Service, NUS). W5500 Ethernet is on hold ([ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)).
 - a web config page turned on by a GPIO ([web-config-server.md](web-config-server.md))
-- RTCM in from SW Maps on Android over the same Bluetooth link, forwarded to UM980 COM2 ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md))
+- RTCM in from SW Maps on Android over the same Bluetooth link, forwarded to UM980 COM1 ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md))
 
 ## Answer: yes, there is plenty of compute (estimate, not yet measured)
 The scaling starts from INSLIB's reference figures on a Cortex-M4F at 180 MHz (STM32F429). The LX7 at 240 MHz is assumed to do about as much float work per clock as the M4F.
@@ -38,7 +38,7 @@ The scaling starts from INSLIB's reference figures on a Cortex-M4F at 180 MHz (S
 That totals roughly **4–8 % of one core**. That's between the RP2350 (5–10 %) and the P4 (2–5 %). As on the P4, the few double operations (lat/lon, one coordinate conversion per fix) run in software and cost a few tens of µs per GNSS epoch. The ~13 KB worst-case stack for `nav_suite_update()` is no problem.
 
 ## Real risks and differences from the Pico 2 W design
-1. **UARTs: enough, with one spare.** Two ports are needed: the TM210 and UM980 COM2. RTCM from SW Maps on the phone over BLE ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)) goes into COM2 together with commands, and no UM980 port is locked ([gnss-um980-config.md](gnss-um980-config.md)). There is no correction radio. Moving the console to USB-Serial-JTAG frees UART0 as well. There is no PIO, so any port beyond the three hardware UARTs would mean an RMT-based software UART (TX only). Switching to the ADIS16465 on SPI would free another UART.
+1. **UARTs: enough, with one spare.** Two ports are needed: the TM210 and UM980 COM1. RTCM from SW Maps on the phone over BLE ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)) goes into COM1 together with commands, and no UM980 port is locked ([gnss-um980-config.md](gnss-um980-config.md)). There is no correction radio. Moving the console to USB-Serial-JTAG frees UART0 as well. There is no PIO, so any port beyond the three hardware UARTs would mean an RMT-based software UART (TX only). Switching to the ADIS16465 on SPI would free another UART.
 2. **FreeRTOS can't be avoided.** That goes against "bare metal first" in [rtos-decision.md](rtos-decision.md). The workaround:
    - Pin the filter task to core 1 at the highest priority.
    - Keep drivers, Wi-Fi, BLE, `esp_timer` and IPC tasks on core 0.
