@@ -21,9 +21,10 @@ The S3 works best running its own firmware that owns the wireless features. Usin
   - Web config and diagnostics on `esp_http_server`.
   - BLE link to SW Maps with the Nordic UART Service (NUS) on NimBLE: NMEA out, RTCM in.
   - Optional later: an NTRIP client over Wi-Fi.
-- **RTCM from SW Maps goes straight from the S3 to UM980 COM2** on one of the S3's own UARTs, so corrections never pass through the Pico. COM2 is locked to RTCM, as in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md). There is no correction radio.
+- **RTCM from SW Maps goes from the S3 over the link to the Pico**, and the Pico writes it to UM980 COM1 through its `um980_tx` arbiter, as in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) and [gnss-um980-config.md](gnss-um980-config.md). Only COM1 is used, and no UM980 port is locked (`CONFIG RXTYPE` is never sent, because of the risk of bricking). There is no correction radio.
   - **No Bluetooth Classic SPP fallback on the S3.** If SW Maps' BLE driver doesn't send RTCM, this setup can't use the SPP route that the Pico 2 W has.
-  - When the W5500 comes back from on hold, RTCM from AgOpenWeb arrives at the Pico and needs its own path (COM3). Only one correction source may be active at a time.
+  - When the W5500 comes back from on hold, RTCM from AgOpenWeb arrives at the Pico and goes into the same COM1 arbiter. Only one correction source may be active at a time.
+  - S3 → Pico link traffic grows by the RTCM rate (about 1–3 kB/s), which the 921600 link carries easily.
 
 ## Link between the Pico and the S3
 - **Data volume is small:**
@@ -60,7 +61,6 @@ The S3 works best running its own firmware that owns the wireless features. Usin
 | Link, Pico TX → S3 RX | PIO UART TX (e.g. GP26) | UART1 RX (any GPIO via the GPIO matrix) |
 | Link, Pico RX ← S3 TX | PIO UART RX (e.g. GP27) | UART1 TX |
 | S3 enable | GP28 (output) | EN |
-| RTCM to UM980 COM2 | — | UART2 TX |
 | GND | GND | GND |
 
 Check the GP26–28 choice against the final Pico pin map. Already used: I2C1 on GP2/GP3, GP16–21 reserved for the W5500 (on hold), the web-mode switch on GP22, plus the UART0/UART1 pins.
@@ -86,4 +86,4 @@ The setup works, as long as each chip owns whole features: the S3 handles everyt
 1. **Link soak test:** the Pico sends `POS` at 10 Hz and `DIAG` at 1 Hz for 1 h. Expect zero CRC errors and no missing sequence numbers.
 2. **Web page and config:** the S3's web page shows live diagnostics from the Pico. A config save pauses the filter, re-aligns and resumes. After a power cycle, the config comes back from NVS.
 3. **S3 failure:** hold the S3's EN low, or unplug it, while the system is running. The Pico's filter timing (bench replay from [rp2350-feasibility.md](rp2350-feasibility.md)) must be unaffected, and so must its Ethernet `$PANDA` output once Ethernet is back from on hold.
-4. **Corrections:** SW Maps connects to the S3 over BLE with its NTRIP client on. RTCM goes from the S3 to UM980 COM2, and the receiver reaches RTK fixed.
+4. **Corrections:** SW Maps connects to the S3 over BLE with its NTRIP client on. RTCM goes from the S3 over the link to the Pico and into UM980 COM1, and the receiver reaches RTK fixed.

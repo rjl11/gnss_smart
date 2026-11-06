@@ -82,8 +82,8 @@ Pitfalls:
   - The MAC address is derived from the RP2350 unique ID, with the locally administered bit set.
 
 ## RTCM over Ethernet
-- Path: UDP 2233 → ring buffer → PIO UART TX → UM980 **COM3**, locked to corrections only (a `CONFIG RXTYPE` command like the one used for COM2; check the exact syntax in the N4 manual).
-- Bluetooth RTCM from the phone (SW Maps) uses COM2 ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)). Only one correction source should be active at a time. The diagnostics page shows which port has received bytes recently.
+- Path: UDP 2233 → ring buffer → RTCM3 frame check → the `um980_tx` arbiter → UART1 TX → UM980 **COM1**. This is the same path that Bluetooth RTCM uses, and no port is locked ([gnss-um980-config.md](gnss-um980-config.md)).
+- Bluetooth RTCM from the phone (SW Maps, [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)) goes into the same queue. Only one correction source may be active at a time; the arbiter takes frames from the selected source and drops the other's. The diagnostics page shows which source has delivered frames recently.
 - With this in place, AgOpenWeb's NTRIP client can replace the phone as the correction source.
 
 ## Discovery

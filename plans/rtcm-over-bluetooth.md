@@ -1,7 +1,7 @@
 # RTCM corrections from SW Maps (Android) over Bluetooth
 
 ## Context
-The external correction radio on UM980 COM2 has been dropped. RTK corrections now come from **SW Maps** on an Android phone:
+The external correction radio (formerly on UM980 COM2) has been dropped. RTK corrections now come from **SW Maps** on an Android phone:
 - SW Maps connects to the device as a Bluetooth GNSS receiver (a "Generic NMEA" device, over Bluetooth LE or Classic) and reads our NMEA.
 - SW Maps runs its own NTRIP client, using the phone's mobile data.
 - It sends the RTCM it receives back to the device over the same Bluetooth link.
@@ -38,15 +38,14 @@ Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary
    - Each frame is a 0xD3 preamble, a 10-bit length and a CRC-24Q.
    - Forward only whole frames that pass the CRC. Count and drop bad ones.
    - Note the message type of each frame for diagnostics.
-3. **PIO UART TX → UM980 COM2 at 115200 baud or faster.**
-   - Lock COM2 to corrections with `CONFIG RXTYPE COM2 RTCM`. This command can only be issued on COM1.
-   - COM2 was the radio's port, so this reuses that port and its lock.
-   - COM1 stays clean for commands and binary logs, and no hardware UART is needed (both are already taken).
-   - One PIO state machine is enough: TX only, no DMA needed at these rates.
-- **Rejected alternative:** writing RTCM frames into UART1 → COM1 between commands. It saves the PIO state machine, but mixes commands and corrections on one port.
+3. **UART1 TX → UM980 COM1 at 460800**, the same port that carries commands and binary logs.
+   - The `um980_tx` arbiter owns UART1 TX. It writes only whole RTCM frames or whole command lines, so the two never interleave. Details in [gnss-um980-config.md](gnss-um980-config.md).
+   - **No port is locked.** `CONFIG RXTYPE` is never sent, because of the risk of bricking. COM1 stays at the default `AUTO`, and in rover mode the receiver recognises RTCM by itself.
+   - Only one cable is needed, and no PIO state machine. UM980 COM2/COM3 are not connected.
+- **Rejected alternative:** a PIO UART TX to COM2, locked with `CONFIG RXTYPE COM2 RTCM`. It keeps COM1 free of corrections, but it needs a port lock (bricking risk) and a second wire.
 
 ## Monitoring and failure behaviour
-- **Correction age and RTK status** come from BESTNAV/PVTSLN, which the UM980 parser already reads.
+- **Correction age and RTK status** come from BESTNAVB (differential age, position type), which the UM980 parser already reads.
 - **If Bluetooth drops:**
   1. Corrections stop.
   2. After its correction-age timeout, the UM980 drops to float, then single.

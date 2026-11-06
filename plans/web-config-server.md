@@ -26,17 +26,18 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - Firmware version, build, uptime, reset reason.
 - Per-sensor: measured rate (IMU 800 Hz, baro 100 Hz, GNSS 20 Hz), packets received, checksum/framing errors, UART overruns, time since last sample.
 - GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset.
+- UM980 setup: provisioning state (detecting / checking / provisioning step N / running / error), last error, receiver serial number and firmware build ([gnss-um980-config.md](gnss-um980-config.md)).
 - Filter: mode (aligning / navigating), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
 - Corrections: Bluetooth connected (BLE or SPP), RTCM bytes and frames received from SW Maps, CRC errors, time since the last frame, message types seen ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
 - Ethernet (on hold): link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233.
 - CPU: core 1 worst-case and mean time per 1.25 ms IMU tick (DWT cycle counter), core 0 load, free stack/heap.
-- Optional: UM980 command passthrough (send a command, show the reply) for debugging.
+- Optional: UM980 command passthrough (send a command, show the reply) for debugging. It goes through the COM1 TX arbiter between RTCM frames. Block `CONFIG RXTYPE`, so a port can't be locked by mistake.
 
 ## Configuration page (write)
 - Lever arms (IMU → GNSS antenna), IMU mounting rotation, filter tuning presets.
 - Output: rate, Bluetooth device name, BLE (NUS) or Classic SPP, message format.
 - Ethernet (on hold): IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999), output sentence (`$PANDA` by default). See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
-- Sensor setup: UART baud rates, UM980 log set (re-sent at boot).
+- Sensor setup: UART baud rates. The UM980 configuration is checked at boot and re-provisioned on a mismatch ([gnss-um980-config.md](gnss-um980-config.md)). A "Reconfigure GNSS" button forces a full re-provision (`FRESET` and the whole sequence).
 - Wi-Fi: SSID, password, AP vs station.
 - Buttons: save, revert to defaults, reboot.
 

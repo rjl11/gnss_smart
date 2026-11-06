@@ -49,7 +49,7 @@ Zero `ins_measurements_t` every epoch. Set `is_valid` only on an epoch that carr
 | `strapdown_dt_sec` | difference of TM210 timestamps | ~1.25 ms |
 | `acc`, `gyr` | TM210 raw object, converted to FRD SI | `Qll_diag` = PSD, see IMU plan |
 | `mag` | TM210 raw mag, only when the value changed | Off for the INS at first |
-| `gnss_pos` | UM980 BESTNAVB (or PVTSLNB): lat/lon in rad, ellipsoid height, σ → diagonal `Qll_ned` | Only when solution status is usable |
+| `gnss_pos` | UM980 BESTNAVB at 20 Hz ([gnss-um980-config.md](gnss-um980-config.md)): lat/lon in rad, ellipsoid height = hgt (MSL) + undulation, σ → diagonal `Qll_ned` | Only when solution status is usable |
 | `gnss_vel` | UM980 horizontal speed + track + vertical speed → NED, σ → diagonal `Qll_ned` | |
 | `gnss_leverarm_b` | antenna position relative to the IMU, FRD [m] | Measure on the vehicle |
 | `gnss_delay_ms` / `gnss_delay_us` | IMU epoch time − GNSS time of validity | GNSS time from PPS; INSLIB's history buffer handles the delay |
