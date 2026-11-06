@@ -6,6 +6,7 @@ Planning documents for gnss_smart: system architecture, hardware selection (MCU,
 |---|---|
 | [rp2350-feasibility.md](rp2350-feasibility.md) | Pico 2 W / RP2350 CPU budget, serial port layout, Bluetooth output |
 | [esp32-p4-feasibility.md](esp32-p4-feasibility.md) | ESP32-P4 as an alternative MCU |
+| [esp32-s3-feasibility.md](esp32-s3-feasibility.md) | ESP32-S3 as an alternative MCU: CPU budget, UART count, Wi-Fi/BLE, risks |
 | [inslib-nav-suite.md](inslib-nav-suite.md) | INSLIB integration through `nav_suite`: options, epoch building, outputs |
 | [imu-tm210.md](imu-tm210.md) | TM210 IMU configuration, protocol, unit/frame conversion and calibration for INSLIB |
 | [imu-adis16465-vs-tm210.md](imu-adis16465-vs-tm210.md) | ADIS16465-2 as an alternative IMU: datasheet comparison, system effect, firmware impact |
