@@ -18,7 +18,7 @@ Sources: `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`, `docs/data
 ## EasyProtocol packet
 `AA 55 | length (1 B) | header (4 B) | payload | CRC16 (2 B, Modbus, over length + header + payload)`
 
-Header bit fields: CMD (7 bits), reserved (3 bits, must be 0, otherwise reject), FROM_ID (11), TO_ID (11).
+Header bit fields: CMD (7 bits), QoS (3 bits), FROM_ID (11), TO_ID (11). The user guide calls the 3 bits "reserved, must be 0". The newer embedded EasyProfile builds (V1-3-1) define them as the sender's QoS, so accept any value ([imu-tm210-config.md](imu-tm210-config.md)).
 
 **Raw Sensor Data object, CMD 41** (40-byte payload, 49 bytes per packet):
 | Bytes | Field | Unit |
@@ -30,25 +30,28 @@ Header bit fields: CMD (7 bits), reserved (3 bits, must be 0, otherwise reject),
 
 **Status object, CMD 22**: timestamp, temperature [°C], internal update rate [Hz], QoS (0–5). Request with the broadcast command `aa55080c08000016000000e0ed`.
 
-## TM210 configuration (ImuAssistant on a PC via USB, save to flash)
+## TM210 configuration (set by the MCU at boot)
+The Pico checks these settings at every boot and provisions the TM210 if they don't match: read-modify-write of the Setting object, applied to RAM first and saved to flash only after the output has been verified. No PC is needed. Details are in [imu-tm210-config.md](imu-tm210-config.md).
+
 | Setting | Value | Why |
 |---|---|---|
-| Output objects | **Raw data only**. RPY, Quaternion, Euler, Gravity off | INSLIB fuses itself; less traffic and parsing |
+| Output objects | **Raw data only**. Status, RPY, Quaternion, Euler, Gravity off | INSLIB fuses itself; less traffic and parsing |
 | ODR | 800 Hz | Full internal rate; INSLIB strapdown at 800 Hz |
 | UART1 baud | 921600 | 49 B × 800 Hz = 39.2 kB/s ≈ 392 kbit/s with start/stop bits, ~43 % of 921600 |
-| USB output | enabled | Debugging with ImuAssistant while the Pico reads UART |
+| USB output (`enable_USB1_CAN1`) | enabled | Debugging with ImuAssistant while the Pico reads UART |
+| Temperature calibration (`reserved7`) | 0 | Vendor recommendation |
 | Boot mode | Auto boot (3.2 s cold start) | No need for the 10–30 s static boot; INSLIB levels itself |
-| Run-time static calibration / automatic heading fix | off, not triggered | Would step the gyro bias underneath INSLIB's bias estimator |
-| Sensor fusion profile | any (default) | Does not affect raw data output |
+| Calibration commands (CalibB, forced calibration per AN002, heading fix) | never sent | They only affect the TM210's fused outputs. With raw-only output they are irrelevant, and INSLIB estimates the biases |
+| Sensor fusion profile, gains | unchanged | Does not affect raw data output |
 | Status object | not auto-output; Pico requests it at 1 Hz | Temperature and QoS for logs and the web page |
 
-Recovery: if the UART baud rate is lost, connect ImuAssistant within 6 s of power-up; the TM210 then locks UART1 to 115200 for that session.
+Recovery: if the baud rate is unknown, the firmware scans the supported rates itself. ImuAssistant is still used for bench work (Allan variance, debugging) and for the one-time capture of how ODR is encoded in the Setting object.
 
 Check after configuring: the TM210 sends only CMD 41 packets at 800 ± 20 Hz on UART1.
 
 ## Firmware: reading the TM210 (core 0)
 - **UART0** at 921600, RX into a DMA ring buffer (≥4 KB, ~100 ms of data). TX is only used for the 1 Hz status request.
-- **Parser**: sync on `AA 55`, check length, CRC, reserved bits = 0, accept CMD 41 (and 22 when requested). Count CRC errors and lost packets for diagnostics.
+- **Parser**: sync on `AA 55`, check length and CRC, accept any value in the 3 QoS bits, accept CMD 41 (plus 21, 13 and 22 when requested or during configuration). Count CRC errors and lost packets for diagnostics.
 - **Timestamps**:
   - Unwrap the uint32 µs timestamp to 64-bit.
   - Use TM210 timestamp differences for `strapdown_dt_sec` (the sensor's own sample spacing, no UART jitter).
