@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-GNSS + IMU fusion firmware for an agricultural (tractor / AgOpenWeb) navigation unit. The project is mostly in the planning stage. `plans/` holds the design, and `firmware/` so far has only the BMP581 barometer driver. No top-level firmware project, build or tests exist yet.
+GNSS + IMU fusion firmware for an survey and agricultural (AgOpenGPS / AgOpenWeb) navigation unit. The project is mostly in the planning stage. `plans/` holds the design, and `firmware/` so far has only the BMP581 barometer driver. No top-level firmware project, build or tests exist yet.
 
 The target system (see `plans/README.md` for the index):
 - **MCU:** Raspberry Pi Pico 2 W (RP2350 + CYW43439), Pico SDK, bare metal. FreeRTOS may come later on core 0 only (`plans/rtos-decision.md`).
