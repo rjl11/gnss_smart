@@ -35,6 +35,8 @@ git submodule update --init --recursive
 - `external/INSLIB`: the navigation filter. It has its own `Makefile`, tests, `coding_style.md` and requirement docs (`requirements/`). Plans cite its headers (`src/nav_suite.h`, `src/ins.h`) as the source of truth.
 - `external/BMP5_SensorAPI`: Bosch BMP5 driver.
 
+Not a submodule: `external/syd_dynamics` is a plain vendored copy of SYD Dynamics' TransducerM examples and the TM210 3D model. It is the EasyProfile protocol reference for the TM210 (see its `README.md`), and it is not compiled. `temp/` is git-ignored scratch space.
+
 ## Plans and docs
 
 - Each plan in `plans/` starts with a **Context** section, cites datasheets by their path in `docs/`, and links related plans by relative link. When adding, renaming or shelving a plan, update the table in `plans/README.md` (shelved plans go under "On hold").

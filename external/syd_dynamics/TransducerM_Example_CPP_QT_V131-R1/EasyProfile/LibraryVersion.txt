@@ -1,0 +1,4 @@
+Current Library Version is
+
+	EasyProfile V1-3-1-R1  -  EasyObjectDictionary fix on compatibility with system without memory alignment. Ep_Setting and Ep_Combo supported. 
+	

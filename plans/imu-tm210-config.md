@@ -12,10 +12,10 @@ Sources:
 - `docs/datasheets/TransducerM_TM3xx_UserGuide_EN_V135-R1.pdf`: EasyProtocol objects Request 12, Acknowledge 13, Setting 21, Status 22, Calibration 23, Raw 41. Also the sections "Communication Protocol" and "Change UART Baudrate".
 - `docs/datasheets/TransducerM_TM210_Datasheet_EN_V126-R.pdf`: ODR values, baud range, start-up times.
 - `docs/TransducerM_AN002_EN_V11.pdf`: run-time forced calibration for AGVs.
-- SYD Dynamics example code, currently in the untracked `temp/` folder:
+- SYD Dynamics example code in `external/syd_dynamics/` (vendored, not compiled; overview in its `README.md`):
   - `TransducerM_Example_CPP_QT_V131-R1/EasyProfile/EasyObjectDictionary.h` (EasyProfile V1-3-1-R1, 2025): the current `Ep_Settings`, `Ep_Switches` and `Ep_Combo` definitions.
   - `TransducerM_Example_CPP_QT_V131-R1/HelloMotionModule.cpp`, `Example_ChangeSetting()`: the vendor's read-modify-write sequence for settings.
-  - `TransducerM_Example_RaspberryPiPico_V1-1/`, `TransducerM_Example_STM32_CPP/`, `TransducerM_Example_ROS-pkg_V1-9/`, `TransducerM_Protocol_C_V1-2-1-Beta/`: embedded, Linux and C builds of the same library.
+  - `TransducerM_Example_RaspberryPiPico_V1-1/`, `TransducerM_Example_STM32_CPP/`, `TransducerM_Example_ROS-pkg_V1-9/`, `TransducerM_Example_ROS2-pkg_V1-1/`, `TransducerM_Protocol_C_V1-2-1-Beta/`: embedded, Linux and C builds of the same library.
     - None of them write settings.
     - The STM32 example receives with `HAL_UARTEx_ReceiveToIdle_DMA`, the same DMA-plus-idle pattern planned for UART0.
     - Its EasyProtocol writes the CRC byte by byte, which avoids unaligned access.

@@ -1,0 +1,4 @@
+Current Library Version is
+
+	EasyProfile V1-3-1-R1  -  Fit Raspberry Pi Pico (RP2040) with Arduino IDE
+	
