@@ -9,7 +9,7 @@ Decisions fixed by the user:
 - **No port is ever locked** (`CONFIG RXTYPE` is never sent), because of the risk of bricking the receiver.
 - **The Pico uses only COM1.** It carries commands, binary logs out and RTCM corrections in. COM3 is the module's USB-C port, left free for a PC running UPrecise. Receiver firmware upgrades are done that way and are out of scope for the firmware. The COM2 pins are not connected. Only their baud rate is set.
 - **Hardware:** Both receivers are **ready-made modules**, not bare LGA parts. Each module exposes: a USB-C port that is **COM3** (for a PC, through a CH340 bridge), COM1 RX/TX and COM2 RX/TX on pins, PPS, 5 V and GND. The mapping was found on the UM982 module ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)) and is assumed for the UM980 module. The Pico's UART1 goes to the COM1 pins.
-  - **Exception, Zero 2 W companion only** ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)): COM2 is wired both ways to the Zero's UART. The Zero writes only CRC-checked RTCM into COM2 RX and never sends commands, so the Pico stays the only device that configures the receiver. COM2 TX carries `GPRMC COM2 1` and `GPZDA COM2 1`, which the Pico enables after the `UNLOG`s, for the Zero's NTP server. RTCM then enters COM2, not COM1. COM2 stays `AUTO`; no `RXTYPE` lock.
+  - **Exception, Zero 2 W companion only** ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)): COM2 is wired both ways to the Zero's UART. The Zero writes only CRC-checked RTCM into COM2 RX and never sends commands, so the Pico stays the only device that configures the receiver (a PC in a `gnss_tcp` session reaches COM1 only through the Pico, which re-checks the config afterwards). COM2 TX carries `GPRMC COM2 1` and `GPZDA COM2 1`, which the Pico enables after the `UNLOG`s, for the Zero's NTP server. RTCM then enters COM2, not COM1. COM2 stays `AUTO`; no `RXTYPE` lock.
 
 Sources: `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf` (section numbers below refer to it) and `docs/datasheets/UM980_Datasheet.pdf`.
 
@@ -89,10 +89,13 @@ UART1 TX has a single owner, the module `um980_tx`, fed by two queues:
 - **RTCM queue:** whole, CRC-checked RTCM3 frames from the Bluetooth path ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
 - **Command queue:** command lines from `gnss_um980_cfg` and, later, the web passthrough.
 
+With the Zero 2 W companion, RTCM enters COM2 instead, and a third source appears: a serial-over-TCP session from a PC (`gnss_tcp` in [pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)). It is a transparent byte stream, not command lines, so the arbiter doesn't queue it with the Pico's commands. While a session is open, the arbiter gives UART1 TX to it alone and holds the command queue.
+
 Rules:
 - Only whole RTCM frames or whole command lines are written, so the two never interleave inside a frame or a line.
-- During provisioning, RTCM is dropped and counted. There is no fix yet, and stale corrections are useless.
+- During provisioning, RTCM and serial-over-TCP bytes are dropped and counted. There is no fix yet, and stale corrections are useless.
 - In "Run", commands go between RTCM frames.
+- When a serial-over-TCP session closes, the Pico re-runs detection and the config check, because the PC may have changed anything.
 - **Load:** RTCM at 1–3 kB/s is under 7 % of 460800. TX can use the FIFO or a DMA channel.
 - No PIO state machine is needed for corrections.
 
