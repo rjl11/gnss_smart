@@ -37,6 +37,10 @@ git submodule update --init --recursive
 
 Not a submodule: `external/syd_dynamics` is a plain vendored copy of SYD Dynamics' TransducerM examples and the TM210 3D model. It is the EasyProfile protocol reference for the TM210 (see its `README.md`), and it is not compiled. `temp/` is git-ignored scratch space.
 
+## Git
+
+Work only on `main`. Don't create branches, worktrees or pull requests; commit straight to `main`.
+
 ## Plans and docs
 
 - Each plan in `plans/` starts with a **Context** section, cites datasheets by their path in `docs/`, and links related plans by relative link. When adding, renaming or shelving a plan, update the table in `plans/README.md` (shelved plans go under "On hold").
