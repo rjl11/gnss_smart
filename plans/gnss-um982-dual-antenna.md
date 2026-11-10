@@ -56,7 +56,7 @@ Related:
   - A longer baseline gives a more accurate heading. The receiver doesn't fix the length (VARIABLELENGTH), but the mount should still be rigid. See "VARIABLELENGTH and the mount" below.
   - Record the baseline direction in the body frame (`baseline_yaw_b`, ANT1 → ANT2, measured from the body x-axis) and the ANT1 lever arm.
   - Mounted across the cab (left → right), `baseline_yaw_b` is +90°.
-- **Lever arm:** `gnss_leverarm_b` in `ins_options_t` is ANT1's, because BESTNAV is the master antenna position.
+- **Lever arm:** `gnss_leverarm_b` in `ins_measurements_t` is ANT1's, because BESTNAV is the master antenna position.
 - **Ports: no change.**
   - UART1 ↔ COM1 at 460800 carries commands, binary logs out and RTCM in.
   - COM3 is the module's USB-C port, left for a PC. The COM2 pins are not connected, except on the Zero 2 W companion, which uses them as described in [gnss-um980-config.md](gnss-um980-config.md). All three are set to 460800.
@@ -107,6 +107,7 @@ In VARIABLELENGTH mode the receiver doesn't check the baseline length against a 
 - **`m.yaw_delay_ms` / `yaw_delay_us`:** the same as the GNSS epoch, from the log's GNSS time against the PPS-anchored capture time.
 - **One epoch:** UNIHEADINGB and BESTNAVB with the same GNSS time go to core 1 in the same epoch, through the same core 0 → core 1 queue. Core 1 only gets a filled `m.yaw`.
 - **`automotive_mode` off on a UM982.** INSLIB fuses the course over ground and the external yaw independently. On a UM982, course yaw adds no information and still pulls the wrong way when reversing. It is an `ins_options_t` setting, so it is fixed at `nav_suite_init()`. Core 1 therefore waits for the model from step 1 (Identify) before init. Identify comes within about a second of the receiver answering, well before the first fix.
+  - **The wait is bounded.** If no receiver has been identified 10 s after boot (a full baud scan takes about 4 s), core 1 calls `nav_suite_init()` anyway with the UM980 setting (`automotive_mode` true), so a missing or dead receiver still leaves ATTITUDE_ONLY mode. If a UM982 is identified later, core 1 re-initialises the filter with `automotive_mode` off (re-align, then navigate), as a config change does ([web-config-server.md](web-config-server.md)).
   - What is lost: no heading aiding while the dual-antenna heading is invalid but the position is good (e.g. ANT2 shadowed). The gyro holds yaw over such gaps.
   - Field logs should show how often that happens. If it does, revisit: feed course yaw from the firmware side as a second `m.yaw` source only when the UNIHEADING is invalid and the tractor is moving forward.
 - **Auto-init:** with `auto_init` true, the INS bootstraps yaw from the external yaw measurement (`ins.h`, auto-init comment). On a UM982, the yaw is then known before the tractor moves.
@@ -152,10 +153,10 @@ The module was connected to a PC through its USB-C port (CH340 USB-serial bridge
 1. **Detection:** a UM980 and a UM982 on the same board (or two carriers) are each identified correctly. The UM980 path is unchanged: same commands and same `UNILOGLIST`.
 2. **Provisioning:**
    - A factory-new UM982 is provisioned with no user action.
-   - `CONFIG` shows `SIGNALGROUP 4 5`, `HEADING VARIABLELENGTH`, COM1/2/3 at 460800 and no RXTYPE lock.
+   - `CONFIG` shows `SIGNALGROUP 3 6` (`4 5` on a build below 10979), `HEADING VARIABLELENGTH`, COM1/2/3 at 460800 and no RXTYPE lock.
    - `UNILOGLIST` shows three logs.
    - After a power cycle, the fast path passes.
-3. **Rate:** BESTNAVB and UNIHEADINGB both arrive at 20 ± 1 Hz on SG 4 5. If not, try SG 3 6 (build ≥ 10979) and record what changes.
+3. **Rate:** BESTNAVB and UNIHEADINGB both arrive at 20 ± 1 Hz on SG 3 6 (build ≥ 10979). If not, try SG 4 5 and record what changes.
 4. **Static heading:** with antennas on a bar at a known azimuth (surveyed points or a known building edge), the heading matches within the receiver's σ, and `baseline_yaw_b` is checked.
 5. **Drive test:**
    - Log UNIHEADING, BESTNAV and the INS yaw. Check:

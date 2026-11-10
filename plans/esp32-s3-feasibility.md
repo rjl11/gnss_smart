@@ -59,7 +59,7 @@ That totals roughly **4–8 % of one core**. That's between the RP2350 (5–10 %
 | CPU | 2x Cortex-M33, 150 MHz | 2x Xtensa LX7, 240 MHz | 2x RISC-V, 360–400 MHz |
 | Est. filter load | 5–10 % of one core | 4–8 % of one core | 2–5 % of one core |
 | Double precision | hardware coprocessor | software | software |
-| UARTs | 2 hardware + up to 11 PIO UARTs | 3, none spare | 5 + low-power UART |
+| UARTs | 2 hardware + up to 11 PIO UARTs | 3, one spare (console on USB-Serial-JTAG) | 5 + low-power UART |
 | Radio | CYW43439: Wi-Fi + BLE + Classic | on-chip Wi-Fi + BLE | none (needs ESP32-C6) |
 | OS / determinism | bare metal possible, very predictable | FreeRTOS required, cache stalls | FreeRTOS required, cache stalls |
 | Ethernet (on hold) | W5500 on SPI | W5500 on SPI | built-in EMAC or W5500 |

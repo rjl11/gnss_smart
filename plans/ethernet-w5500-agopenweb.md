@@ -2,7 +2,7 @@
 
 > **Status: on hold** (2026-11-06). This is not part of the current build. The plan is kept for when wired Ethernet / AgOpenWeb output is added, and SPI0 (GP16–21) stays reserved for it.
 
-## Idea
+## Context
 Add a WIZnet W5500 Ethernet module on SPI so the device sends its position over wired UDP to [AgOpenWeb](https://github.com/AgOpenGPS-Official/AgOpenWeb) (and AgOpenGPS/AgIO) on the tractor network. BLE output stays as it is. Ethernet is an extra channel, not a replacement.
 
 ## What AgOpenWeb expects

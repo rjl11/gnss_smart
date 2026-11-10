@@ -109,6 +109,8 @@ The library calls bits 26–31 "unused, must be 0", but bits 26–28 clearly do 
 ## Target configuration
 Read-modify-write. Every field not listed is copied unchanged from the read-back.
 
+"UART1" in this plan is the TM210's own name for its UART (`uart1_Baudrate`, "UART1 output"). On the Pico that link is **UART0**; the Pico's UART1 is the UM980.
+
 | Field | Target | Why |
 |---|---|---|
 | Status, Quaternion, Euler, RPY, Gravity output (bits 5, 8, 10, 11, 12) | 0 | Raw only. The Pico requests Status at 1 Hz |
@@ -127,7 +129,7 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 ## Boot state machine (core 0, module `imu_tm210_cfg`)
 1. **Detect:**
    - Set UART0 to 921600, broadcast the Setting request, and wait up to 300 ms (the vendor's wait) for a CMD 21 reply with a valid CRC.
-   - If none comes, scan 115200, 1M, 460800, 230400, 57600, 38400 and 9600 the same way.
+   - If none comes, scan 115200, 1M, 460800, 230400, 57600, 38400, 9600, 2400 and 1200 the same way. At 2400 and 1200 wait 1 s, because the 29-byte reply alone takes up to about 0.25 s.
    - If nothing answers, report "no IMU" and retry every 2 s. Cold start takes 3.2 s, and longer if a previous user set Static boot.
    - From the reply, keep the node ID (`fromId`) and the raw 20-byte settings.
 2. **Check (fast path):**
@@ -163,12 +165,12 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 - Restore to the original settings.
 
 **Still to do:**
-1. **UART link:** with the Pico (or a USB-UART adapter) on UART1, provision from 115200 and check:
+1. **UART link:** with the Pico's UART0 (or a USB-UART adapter) on the TM210's UART, provision from 115200 and check:
    - whether the Ack arrives at the old or the new baud, and how soon after the Ack the new baud is active
    - 800 ± 20 Hz CMD 41 at 921600 with zero CRC errors over 10 minutes.
 2. **Factory-default TM210:** provisioned with no user action.
 3. **Power-cycle:** the fast path passes and there is no flash write. The flash commit (bit 18 = 1) has not yet been exercised by our code.
 4. **Mismatch:** turn RPY on in ImuAssistant and save. On the next boot it is detected and corrected.
 5. **Interrupted provisioning:** remove power between steps 3.1 and 3.4. The next boot finds the old flash settings and provisions again.
-6. **USB debugging:** ImuAssistant on USB sees data while the Pico reads UART1.
+6. **USB debugging:** ImuAssistant on USB sees data while the Pico reads the TM210's UART.
 7. **Silent Time:** confirm bytes 16–17 are Silent Time in seconds. Set it to 2 in flash, power-cycle, and time the first packet.

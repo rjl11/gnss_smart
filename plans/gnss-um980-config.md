@@ -99,7 +99,7 @@ Rules:
 - **Load:** RTCM at 1–3 kB/s is under 7 % of 460800. TX can use the FIFO or a DMA channel.
 - No PIO state machine is needed for corrections.
 
-Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)). Core 1 gets GNSS samples only once state "Run" is reached. Until then INSLIB runs without GNSS.
+Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)). Core 1 gets GNSS samples only once state "Run" is reached. Until then INSLIB runs without GNSS. Core 1 holds `nav_suite_init()` until "Identify" has given the receiver model, but for at most 10 s after boot, so the filter also starts when no receiver answers ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md), "INSLIB integration").
 
 ## Verification (bench, when implemented)
 1. A factory-new UM980 (or one reset with `FRESET` from UPrecise) is provisioned with no user action. The log shows every step OK and the total time (40–60 s, estimate, not yet measured).

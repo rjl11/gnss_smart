@@ -59,7 +59,7 @@ Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary
   - Correction age as reported by the UM980.
 
 ## Timing
-Everything runs on core 0, as laid out in [rtos-decision.md](rtos-decision.md). The filter on core 1 is unaffected. Bluetooth receive bursts are small (a few hundred bytes per second, in chunks).
+Everything runs on core 0, as laid out in [rtos-decision.md](rtos-decision.md). The filter on core 1 is unaffected. Bluetooth receive load is small (1–3 kB/s, in chunks of up to a few hundred bytes).
 
 ## Field notes
 - The phone must stay within Bluetooth range, so mount it in the cab, not in a pocket outside.

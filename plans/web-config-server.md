@@ -1,6 +1,6 @@
 # Web server for configuration and diagnostics (Pico 2 W, GPIO toggle)
 
-## Idea
+## Context
 Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configuration and diagnostics. It's only on when a GPIO says so, so normal operation keeps Wi-Fi off, the power low and the filter undisturbed. Bluetooth stays on all the time, because it carries the RTCM corrections from SW Maps ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
 
 ## GPIO toggle
@@ -28,17 +28,18 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset.
 - UM980 setup: provisioning state (detecting / checking / provisioning step N / running / error), last error, receiver serial number and firmware build ([gnss-um980-config.md](gnss-um980-config.md)).
 - TM210 setup: provisioning state, last error, node ID, and the QoS and temperature from the Status object ([imu-tm210-config.md](imu-tm210-config.md)).
-- Filter: mode (aligning / navigating), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
+- GNSS heading (UM982 only): receiver model, heading solution status and position type, baseline length and its median, heading σ, gated epochs ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)).
+- Filter: `nav_suite` mode (NONE / ATTITUDE_ONLY / COASTING / FULL, [inslib-nav-suite.md](inslib-nav-suite.md)), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
 - Corrections: Bluetooth connected (BLE or SPP), RTCM bytes and frames received from SW Maps, CRC errors, time since the last frame, message types seen ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
 - Ethernet (on hold): link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233.
 - CPU: core 1 worst-case and mean time per 1.25 ms IMU tick (DWT cycle counter), core 0 load, free stack/heap.
 - Optional: UM980 command passthrough (send a command, show the reply) for debugging. It goes through the COM1 TX arbiter between RTCM frames. Block `CONFIG RXTYPE`, so a port can't be locked by mistake.
 
 ## Configuration page (write)
-- Lever arms (IMU → GNSS antenna), IMU mounting rotation, filter tuning presets.
+- Lever arms (IMU → GNSS antenna), IMU mounting rotation, filter tuning presets. On a UM982, also the antenna baseline direction `baseline_yaw_b` ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)).
 - Output: rate, Bluetooth device name, BLE (NUS) or Classic SPP, message format.
 - Ethernet (on hold): IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999), output sentence (`$PANDA` by default). See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
-- Sensor setup: UART baud rates. The UM980 configuration is checked at boot and re-provisioned on a mismatch ([gnss-um980-config.md](gnss-um980-config.md)). A "Reconfigure GNSS" button forces a full re-provision (`FRESET` and the whole sequence). In the same way, the TM210 is checked at boot ([imu-tm210-config.md](imu-tm210-config.md)), and a "Reconfigure IMU" button forces its provisioning sequence.
+- Sensor setup: the UART baud rates are fixed (460800 for the UM980, 921600 for the TM210) and not configurable. The UM980 configuration is checked at boot and re-provisioned on a mismatch ([gnss-um980-config.md](gnss-um980-config.md)). A "Reconfigure GNSS" button forces a full re-provision (`FRESET` and the whole sequence). In the same way, the TM210 is checked at boot ([imu-tm210-config.md](imu-tm210-config.md)), and a "Reconfigure IMU" button forces its provisioning sequence.
 - Wi-Fi: SSID, password, AP vs station.
 - Buttons: save, revert to defaults, reboot.
 
@@ -46,7 +47,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - A versioned struct with a CRC in the last flash sector(s) (4 KB each). Use two sectors alternately so a power cut during a write never loses the config.
 - **Flash writes stall execute-in-place on both cores.** Writing needs `flash_safe_execute()`, which pauses core 1 with `multicore_lockout`.
 - **Position and attitude output may pause while a setting is applied.** So a save is simple: core 0 tells core 1 to stop the filter, writes flash, then restarts the filter with the new settings. No need to keep the filter running through a flash write or to run it from SRAM for this reason.
-- Because of that, settings can be applied live without a reboot: the filter re-initialises (re-align, then navigate) with the new lever arms, mounting or tuning. Sensor baud rates and Wi-Fi settings still apply on reboot.
+- Because of that, settings can be applied live without a reboot: the filter re-initialises (re-align, then navigate) with the new lever arms, mounting or tuning. Wi-Fi settings still apply on reboot.
 - The diagnostics page and the BLE output should show that output is paused (e.g. a status flag in the output message) rather than going silent, so a connected client can tell a config pause from a fault.
 
 ## Security

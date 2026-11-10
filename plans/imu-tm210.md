@@ -37,7 +37,7 @@ The Pico checks these settings at every boot and provisions the TM210 if they do
 |---|---|---|
 | Output objects | **Raw data only**. Status, RPY, Quaternion, Euler, Gravity, Combo (CMD 43) and CMD 42 off | INSLIB fuses itself; less traffic and parsing |
 | ODR | 800 Hz (Setting bytes 18–19, in Hz; verified on the bench) | Full internal rate; INSLIB strapdown at 800 Hz |
-| UART1 baud | 921600 | 49 B × 800 Hz = 39.2 kB/s ≈ 392 kbit/s with start/stop bits, ~43 % of 921600 |
+| TM210 UART baud (the TM210 calls its port UART1; it goes to the Pico's UART0) | 921600 | 49 B × 800 Hz = 39.2 kB/s ≈ 392 kbit/s with start/stop bits, ~43 % of 921600 |
 | USB output (switch bit 20) | on | ImuAssistant can debug over USB while the Pico reads UART; also the recovery path. The TM210 has no CAN bus, so the user guide's CAN settings don't apply |
 | Temperature calibration (`reserved7`) | 0 | Vendor recommendation |
 | Boot mode | Auto boot (3.2 s cold start) | No need for the 10–30 s static boot; INSLIB levels itself |
@@ -47,10 +47,10 @@ The Pico checks these settings at every boot and provisions the TM210 if they do
 
 Recovery: if the baud rate is unknown, the firmware scans the supported rates itself. By hand, the TM210 is recovered over its USB port (vendor Q&A); the 6-second 115200 SCAN lock in the user guide is for the TM200/TM35x, not the TM210. ImuAssistant is still used for bench work (Allan variance, debugging).
 
-Check after configuring: the TM210 sends only CMD 41 packets at 800 ± 20 Hz on UART1.
+Check after configuring: the TM210 sends only CMD 41 packets at 800 ± 20 Hz on its UART (the Pico's UART0).
 
 ## Firmware: reading the TM210 (core 0)
-- **UART0** at 921600, RX into a DMA ring buffer (≥4 KB, ~100 ms of data). TX is only used for the 1 Hz status request.
+- **UART0** at 921600, RX into a DMA ring buffer (≥4 KB, ~100 ms of data). TX carries the Setting read and write at boot ([imu-tm210-config.md](imu-tm210-config.md)) and then the 1 Hz status request.
 - **Parser**: sync on `AA 55`, check length and CRC, accept and ignore the 3 header bits after CMD, accept CMD 41 (plus 21, 13 and 22 when requested or during configuration). Count CRC errors and lost packets for diagnostics.
 - **Timestamps**:
   - Unwrap the uint32 µs timestamp to 64-bit.

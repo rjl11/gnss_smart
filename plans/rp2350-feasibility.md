@@ -50,7 +50,7 @@ A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It d
 
 | Port | Device | Direction | Baud |
 |---|---|---|---|
-| UART0 (hardware) | TM210 IMU | RX raw data, TX status request | 921600 |
+| UART0 (hardware) | TM210 IMU | RX raw data, TX config + status request | 921600 |
 | UART1 (hardware) | UM980 COM1 | RX binary logs, TX config + RTCM | 460800 |
 | On-board CYW43439 (BLE, or Classic SPP as fallback) | Phone (SW Maps) | position output 10 Hz, RTCM in | — |
 | SPI0 (GP16–21) | W5500 Ethernet (on hold, pins reserved) | UDP `$PANDA` out 10 Hz, RTCM in (also to COM1) | ~30 MHz SPI |

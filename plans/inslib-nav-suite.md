@@ -19,7 +19,7 @@ What that buys over bare `ins`:
 - Same constraints as bare `ins`: no heap, all state in `nav_suite_t`, worst-case stack about 13 KB.
 
 ## Lifecycle (core 1)
-1. Zero a static `nav_suite_t`, fill `ins_init_t` and `ins_options_t`, call `nav_suite_init()`.
+1. Wait for the receiver model from core 0 (UM980 or UM982), because it sets `automotive_mode`. The wait ends after 10 s at the latest, with the UM980 setting; a UM982 identified later triggers a re-init ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)). Then zero a static `nav_suite_t`, fill `ins_init_t` and `ins_options_t`, call `nav_suite_init()`.
 2. Optionally tune `suite.ars_cfg` / `suite.ahrs_cfg` / `suite.baro_cfg` before the first update.
 3. Loop: pop one IMU sample (plus any GNSS/baro that arrived) from the core 0 queue, build an `ins_measurements_t`, call `nav_suite_update()`. One call per TM210 sample, so 800 calls per second. The strapdown runs every call; the covariance prediction runs at `kalman_update_dt_sec` (20 Hz).
 4. After the first usable GNSS fix, and again after moving far (e.g. 50 km), call `nav_suite_set_magnetic_model_position(lat, lon, year)`.
@@ -53,6 +53,7 @@ Zero `ins_measurements_t` every epoch. Set `is_valid` only on an epoch that carr
 | `gnss_vel` | UM980 horizontal speed + track + vertical speed → NED, σ → diagonal `Qll_ned` | |
 | `gnss_leverarm_b` | antenna position relative to the IMU, FRD [m] | Measure on the vehicle |
 | `gnss_delay_ms` / `gnss_delay_us` | IMU epoch time − GNSS time of validity | GNSS time from PPS; INSLIB's history buffer handles the delay |
+| `yaw`, `yaw_delay_ms` / `yaw_delay_us` | UM982 only: UNIHEADINGB heading minus `baseline_yaw_b`, at 20 Hz ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)) | Left invalid on a UM980. Same delay as the GNSS epoch |
 | `baro` | BMP581 pressure [Pa], 100 Hz | New samples only |
 
 GNSS and baro samples are attached to the next IMU epoch after they arrive on core 1; the delay fields carry how old they are.

@@ -17,7 +17,7 @@ Sources: `docs/datasheets/UM980_Datasheet.pdf` (R1.0, 2022-08), `docs/datasheets
 | Channels | 1408 (NebulasIV) | 448 |
 | GPS | L1 C/A, L1C*, L2P(Y), L2C, L5 | L1C/A, L1C, L1PY, L2C, L2P, L5 |
 | GLONASS | L1, L2 | L1, L2, L2P, L3 CDMA |
-| Galileo | E1, E5a, E5b (**no E6**) | E1, E5a, E5b, E5 AltBOC, E6 ("hardware ready") |
+| Galileo | E1, E5a, E5b in the datasheet. E6 is listed for SG 2 in the N4 commands manual (§4.48), see "Signals" below | E1, E5a, E5b, E5 AltBOC, E6 ("hardware ready") |
 | BeiDou | B1I, B2I, B3I, B1C, B2a, B2b* | B1I, B1C, B2a, B2I, B3I ("hardware ready") |
 | Other | QZSS L1/L2/L5, SBAS | QZSS, NavIC L5, SBAS L1/L5, on-module L-band |
 | Interference / robustness | JamShield, 60 dB narrowband anti-jam | AIM+ (narrow band, wide band, chirp), APME+ multipath, LOCK+ vibration/shock, IONO+ scintillation, RAIM+ integrity |
@@ -37,13 +37,13 @@ Both are single-antenna receivers. A dual-antenna variant (mosaic-H, UM982) woul
 ## Effect on the system
 - **Open sky: no practical difference** for AgOpenGPS steering. Both hold 1–2 cm RTK, and the UM980 even initialises slightly faster on paper. The mosaic's ppm term is half the UM980's, which only shows on long baselines (e.g. 20 km NTRIP: 1.6 cm vs 2.8 cm + base).
 - **Where the mosaic is better:** tree lines, buildings, jammers (common near roads), multipath off the cab and roof, and engine vibration. Expect fewer float or lost-fix episodes and faster recovery, and RAIM+ adds integrity against wrong fixes. This reduces how many GNSS outages the IMU has to bridge ([imu-adis16465-vs-tm210.md](imu-adis16465-vs-tm210.md) covers the IMU side).
-- **Signals:** the UM980 does not track Galileo E6, so Galileo HAS is unavailable on it. The mosaic's E6 support depends on firmware (the 2020 sheet says "hardware ready"). For RTK with an NTRIP or radio base, neither matters.
+- **Signals:** the two UM980 sources disagree on Galileo E6. The 2022 datasheet doesn't list it. The newer N4 commands manual lists E6 in signal group 2, the group this project uses ([gnss-um980-config.md](gnss-um980-config.md)), and a UM982 on the same firmware family reported `PPP ENABLE E6-HAS` ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)). So E6 and Galileo HAS are probably available with current firmware; confirm on a UM980 on the bench. The mosaic's E6 support depends on firmware (the 2020 sheet says "hardware ready"). For RTK with an NTRIP or radio base, neither matters.
 - **Timing:** both receivers have a PPS output and an event input. The mosaic's two event inputs (<20 ns) can timestamp the IMU's data-ready pulse directly in GNSS time.
 - **Covariance for INSLIB:** SBF `PosCovGeodetic` / `VelCovGeodetic` give a full covariance for `gnss_pos` / `gnss_vel` `Qll_ned`. That is more useful than the UM980's per-axis σ, although `gnss_pos_cov_scale` tuning is still needed.
 - **Heading:** unchanged. `automotive_mode` (heading from COG) stays the main source while moving.
 
 ## Firmware impact if switched
-- **Parser:** replace the Unicore binary parser (BESTNAV/PVTSLN) with SBF: `PVTGeodetic`, `PosCovGeodetic`, `VelCovGeodetic`, `ReceiverTime`, plus `EndOfPVT` to mark the epoch. SBF has CRC-16 and a fixed header, so the parsing pattern is similar.
+- **Parser:** replace the Unicore binary parser (BESTNAVB, STADOPB) with SBF: `PVTGeodetic`, `PosCovGeodetic`, `VelCovGeodetic`, `ReceiverTime`, plus `EndOfPVT` to mark the epoch. SBF has CRC-16 and a fixed header, so the parsing pattern is similar.
 - **Config:** Septentrio commands (`setSBFOutput`, `setDataInOut`, `setPVTMode`) instead of Unicore `CONFIG`/`LOG`.
 - **Ports** ([rp2350-feasibility.md](rp2350-feasibility.md) layout):
   - UART1 stays the receiver's SBF output and command port. It could run faster, up to 4 Mbps.

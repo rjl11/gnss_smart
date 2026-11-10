@@ -1,5 +1,8 @@
 # RTOS decision: bare metal first, FreeRTOS later
 
+## Context
+The firmware runs on a dual-core RP2350 ([rp2350-feasibility.md](rp2350-feasibility.md)). The filter needs deterministic 800 Hz timing, while the I/O side (UARTs, Bluetooth, later Wi-Fi) is what an RTOS usually helps with. This plan decides whether to start on bare metal or on FreeRTOS, and how to keep a later move small.
+
 ## Recommendation
 Start bare metal on the Pico SDK. Move to FreeRTOS when NTRIP over Wi-Fi or SD logging is added.
 
