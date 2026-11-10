@@ -37,7 +37,7 @@ The S3 works best running its own firmware that owns the wireless features. Usin
   | Type | Direction | Content |
   |---|---|---|
   | `HELLO` | both, at boot | firmware and protocol version, so mismatched firmwares are detected |
-  | `POS` | Pico → S3 | the same fields as `$PANDA` (defined in the on-hold Ethernet plan), plus the `nav_suite` mode (NONE / ATTITUDE_ONLY / COASTING / FULL) and a "paused" flag |
+  | `POS` | Pico → S3 | the same fields as `$PAOGI` (defined in the on-hold Ethernet plan), plus the `nav_suite` mode (NONE / ATTITUDE_ONLY / COASTING / FULL) and a "paused" flag |
   | `DIAG` | Pico → S3 | the fields for the diagnostics page |
   | `CFG_GET` / `CFG_SET` / `CFG_ACK` | both | read, write and acknowledge the config struct |
   | `HEARTBEAT` | both, 1 Hz | liveness |
@@ -85,5 +85,5 @@ The setup works, as long as each chip owns whole features: the S3 handles everyt
 ## Verification (when implementing)
 1. **Link soak test:** the Pico sends `POS` at 10 Hz and `DIAG` at 1 Hz for 1 h. Expect zero CRC errors and no missing sequence numbers.
 2. **Web page and config:** the S3's web page shows live diagnostics from the Pico. A config save pauses the filter, re-aligns and resumes. After a power cycle, the config comes back from NVS.
-3. **S3 failure:** hold the S3's EN low, or unplug it, while the system is running. The Pico's filter timing (bench replay from [rp2350-feasibility.md](rp2350-feasibility.md)) must be unaffected, and so must its Ethernet `$PANDA` output once Ethernet is back from on hold.
+3. **S3 failure:** hold the S3's EN low, or unplug it, while the system is running. The Pico's filter timing (bench replay from [rp2350-feasibility.md](rp2350-feasibility.md)) must be unaffected, and so must its Ethernet `$PAOGI` output once Ethernet is back from on hold.
 4. **Corrections:** SW Maps connects to the S3 over BLE with its NTRIP client on. RTCM goes from the S3 over the link to the Pico and into UM980 COM1, and the receiver reaches RTK fixed.

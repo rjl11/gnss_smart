@@ -116,7 +116,7 @@ In VARIABLELENGTH mode the receiver doesn't check the baseline length against a 
 
 ## Outputs
 - **NMEA to SW Maps:** add `$GNHDT` (true heading, from the INS yaw) at 10 Hz, only once the INS heading is valid. SW Maps and other apps show it as the heading. GGA/RMC are unchanged.
-- **`$PANDA` / `$PAOGI`** (when Ethernet returns, [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)): the heading field already comes from the INS yaw. With a UM982, `$PAOGI` (the dual-antenna sentence) becomes the natural option.
+- **`$PAOGI`** (when Ethernet returns, [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)): the only Ethernet sentence, on a UM980 and a UM982 alike. Its heading field is the INS yaw, so nothing changes with a UM982 except that the yaw is valid earlier.
 - **Diagnostics page:** shows the receiver model, the heading solution status and position type, the baseline length and its median, heading σ, the count of gated epochs, and `baseline_yaw_b`.
 
 ## Core split

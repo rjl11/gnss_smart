@@ -45,7 +45,7 @@ A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It d
    - **No port is locked** (`CONFIG RXTYPE` is never sent, because of the risk of bricking). COM1 stays at `AUTO` and recognises RTCM by itself.
    - The firmware watches correction age and RTK status in the UM980's BESTNAV output.
    - Details: [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md).
-2. **Position output goes over the Pico 2 W's on-board Bluetooth**, so it needs no UART. See "Bluetooth output" below. A W5500 Ethernet module on SPI (UDP `$PANDA` for AgOpenWeb) is **on hold**: its plan is kept in [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md), and its pins stay reserved.
+2. **Position output goes over the Pico 2 W's on-board Bluetooth**, so it needs no UART. See "Bluetooth output" below. A W5500 Ethernet module on SPI (UDP `$PAOGI` for AgOpenWeb) is **on hold**: its plan is kept in [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md), and its pins stay reserved.
 3. **PIO UARTs are spare capacity.** The RP2350 has 3 PIO blocks with 12 state machines in total. The CYW43439 radio uses one state machine plus a DMA channel for its SPI link (internal pins GPIO23/24/25/29), which leaves 11. The Pico SDK's `pio_uart_tx` / `pio_uart_rx` give one UART per state machine, receiving via DMA, at speeds well beyond 921600 baud. Use them if more serial ports are needed later.
 
 | Port | Device | Direction | Baud |
@@ -53,7 +53,7 @@ A second RP2350 linked over SPI (I2C is too slow for streaming) would work. It d
 | UART0 (hardware) | TM210 IMU | RX raw data, TX config + status request | 921600 |
 | UART1 (hardware) | UM980 COM1 | RX binary logs, TX config + RTCM | 460800 |
 | On-board CYW43439 (BLE, or Classic SPP as fallback) | Phone (SW Maps) | position output 10 Hz, RTCM in | — |
-| SPI0 (GP16–21) | W5500 Ethernet (on hold, pins reserved) | UDP `$PANDA` out 10 Hz, RTCM in (also to COM1) | ~30 MHz SPI |
+| SPI0 (GP16–21) | W5500 Ethernet (on hold, pins reserved) | UDP `$PAOGI` out 10 Hz, RTCM in (also to COM1) | ~30 MHz SPI |
 | GPIO interrupt | UM980 PPS | time sync | — |
 | I2C1 (e.g. GP2/GP3) | BMP581 | — | — |
 

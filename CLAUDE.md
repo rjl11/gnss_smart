@@ -11,7 +11,7 @@ The target system (see `plans/README.md` for the index):
 - **Sensors:** Unicore UM980 GNSS on a ready-made module (USB-C = COM3 for a PC, COM1/COM2 UART pins, PPS, 5 V; 20 Hz binary logs on UART1 → COM1, PPS on a GPIO; a UM982 dual-antenna variant with GNSS heading is detected at boot, `plans/gnss-um982-dual-antenna.md`), TM210 IMU (800 Hz raw data only on UART0 at 921600; the MCU configures it at boot, `plans/imu-tm210-config.md`, and never sends TM210 calibration commands), BMP581 barometer (100 Hz on I2C1).
 - **Filter:** INSLIB `nav_suite` (`external/INSLIB`). It needs no heap, all its state sits in `nav_suite_t`, and its worst-case stack is about 13 KB (`plans/inslib-nav-suite.md`).
 - **Links:** BLE NUS (Classic SPP as fallback) to SW Maps on Android carries NMEA out at 10 Hz and RTCM in. Each CRC-checked RTCM frame goes to UM980 COM1 on UART1, the same port that carries commands and logs (`plans/rtcm-over-bluetooth.md`). The Pico uses only COM1 (COM3 is the module's USB-C, left for a PC; COM2 goes to the Zero 2 W companion if fitted), and no UM980 port is ever locked (`CONFIG RXTYPE` risks bricking it). The MCU configures the UM980 itself at boot (`plans/gnss-um980-config.md`).
-- **On hold:** W5500 Ethernet / `$PANDA` output. Its pins (SPI0, GP16–21) stay reserved, so don't assign them to anything else.
+- **On hold:** W5500 Ethernet / `$PAOGI` output. Its pins (SPI0, GP16–21) stay reserved, so don't assign them to anything else.
 
 ## Core split (applies to all firmware code)
 

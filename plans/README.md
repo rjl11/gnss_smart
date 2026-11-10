@@ -25,4 +25,4 @@ These plans are not part of the current build, but they are kept for later.
 
 | Plan | Topic |
 |---|---|
-| [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md) | W5500 Ethernet, `$PANDA` output for AgOpenWeb, RTCM in. SPI0 (GP16–21) stays reserved for it |
+| [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md) | W5500 Ethernet, `$PAOGI` output for AgOpenWeb, RTCM in. SPI0 (GP16–21) stays reserved for it |

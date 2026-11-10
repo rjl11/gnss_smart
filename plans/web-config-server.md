@@ -31,14 +31,14 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - GNSS heading (UM982 only): receiver model, heading solution status and position type, baseline length and its median, heading σ, gated epochs ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)).
 - Filter: `nav_suite` mode (NONE / ATTITUDE_ONLY / COASTING / FULL, [inslib-nav-suite.md](inslib-nav-suite.md)), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
 - Corrections: Bluetooth connected (BLE or SPP), RTCM bytes and frames received from SW Maps, CRC errors, time since the last frame, message types seen ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)).
-- Ethernet (on hold): link up/down, `$PANDA` datagrams sent, RTCM bytes received on UDP 2233.
+- Ethernet (on hold): link up/down, `$PAOGI` datagrams sent, RTCM bytes received on UDP 2233.
 - CPU: core 1 worst-case and mean time per 1.25 ms IMU tick (DWT cycle counter), core 0 load, free stack/heap.
 - Optional: UM980 command passthrough (send a command, show the reply) for debugging. It goes through the COM1 TX arbiter between RTCM frames. Block `CONFIG RXTYPE`, so a port can't be locked by mistake.
 
 ## Configuration page (write)
 - Lever arms (IMU → GNSS antenna), IMU mounting rotation, filter tuning presets. On a UM982, also the antenna baseline direction `baseline_yaw_b` ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)).
 - Output: rate, Bluetooth device name, BLE (NUS) or Classic SPP, message format.
-- Ethernet (on hold): IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999), output sentence (`$PANDA` by default). See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
+- Ethernet (on hold): IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999). The output sentence is always `$PAOGI`. See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
 - Sensor setup: the UART baud rates are fixed (460800 for the UM980, 921600 for the TM210) and not configurable. The UM980 configuration is checked at boot and re-provisioned on a mismatch ([gnss-um980-config.md](gnss-um980-config.md)). A "Reconfigure GNSS" button forces a full re-provision (`FRESET` and the whole sequence). In the same way, the TM210 is checked at boot ([imu-tm210-config.md](imu-tm210-config.md)), and a "Reconfigure IMU" button forces its provisioning sequence.
 - Wi-Fi: SSID, password, AP vs station.
 - Buttons: save, revert to defaults, reboot.
