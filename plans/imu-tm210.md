@@ -68,6 +68,8 @@ INSLIB wants FRD, accelerometer as **specific force** in m/s² (level and at res
 | Accelerometer | `(ax, −ay, −az) × 9.8158` **if** the TM210 outputs specific force. The datasheet footnote shows `(0, 0, −1)` with z pointing to the sky, which is the gravity-vector sign; then it is `(−ax, ay, az) × 9.8158`. **Decide on the bench** (see checks below). |
 | Magnetometer | `(mx, −my, −mz) × ~50 µT` (approx. total field in Denmark), then refine with mag calibration |
 
+Evidence for the accelerometer sign, from another project: the AgOpenWeb-HAT IMU evaluation (https://github.com/chriskinal/AgOpenWeb-HAT, `hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md` §8.4, commit `e4bd9ef`, read 2026-11-10) logged a **TM171** beside an ST IMU and found "the same axes [X forward, Y left, Z up], its accel the opposite sign (it reports gravity), its gyro in rad/s". That points to the second form, `(−ax, ay, az) × 9.8158`. It was measured on a TM171's output, not on our TM210's raw object, so the bench check still decides.
+
 Do the sign/unit conversion in the parser so all later data is plain FRD SI. Put the **physical mounting** (TM210 not aligned with the vehicle) into config as `mount_rpy_deg` and compose it into `imu_acc_misalignment` / `imu_gyr_misalignment` with `imu_mount_compose()` from `external/INSLIB/tools/imu_mount.h`.
 
 Magnetometer: the TM210 samples it at 75 Hz but repeats it in every 800 Hz packet. Set `mag.is_valid` only when the value changes. Keep it off for the INS until it is calibrated on the vehicle ([inslib-nav-suite.md](inslib-nav-suite.md)).
@@ -80,6 +82,17 @@ Start values from the datasheet, to be replaced by Allan variance results:
 | `gyr.Qll_diag` (PSD) | 1.5e-8 (rad/s)²/Hz | 0.2–0.35 °/s p-p at 100 Hz → σ ≈ 0.05 °/s over 50 Hz → ~1.2e-4 rad/s/√Hz |
 | `gyr_bias_pred_stddev_rps_sqrts` | 2e-6 to 1e-5 rad/s/√s | `config_basic.yaml` value, raised for outdoor temperature swing |
 | `acc_bias_pred_stddev_mps2_sqrts` | 3e-4 m/s²/√s | `config_basic.yaml` value |
+
+**A measured comparison (TM171, not our TM210).** The AgOpenWeb-HAT evaluation (same document, §8.4) ran a 2 h Allan test on a TM171 on 2026-11-06, at 24–26 °C:
+
+| | Measured on their TM171 | As an INSLIB PSD | Our datasheet start value |
+|---|---|---|---|
+| Gyro random walk x / y / z | 0.70 / 0.92 / 0.41 °/√h | 4.1e-8 / 7.2e-8 / 1.4e-8 (rad/s)²/Hz | 1.5e-8 (≈ 0.4 °/√h) |
+| Accel noise density | about 145 µg/√Hz | 2.0e-6 (m/s²)²/Hz | 3.5e-6 (190 µg/√Hz) |
+| Gyro bias instability | 1.0 / 0.8 / 0.4 °/h at 650 s | — | datasheet: <5.5 °/h |
+| Accel bias instability | 0.03–0.10 mg | — | datasheet: 0.05 mg |
+
+So the x and y gyro noise may be about 2× the datasheet-derived figure, and the accelerometer a little quieter. Their note says the TM171 outputs bias-corrected, filtered data, and they logged it at 20 ms spacing, so the figures are not directly those of a TM210 raw object at 800 Hz. They are a reason to run our own Allan test before trusting the start values, not replacements for them.
 
 ## Calibration steps
 1. **Allan variance**: 2 h static log at 800 Hz, constant temperature → `external/INSLIB/tools/allan_variance.py` → final PSDs and bias random walks.
@@ -95,3 +108,13 @@ Expected specific force: `f = (g·sinθ, −g·sinφ·cosθ, −g·cosφ·cosθ)
 - Rate: 800 ± 20 packets/s, CRC error rate ≈ 0 over 10 minutes with the real cable length.
 - Timestamp wrap: run > 72 min and check the unwrapped time stays monotonic.
 - Run INSLIB's static auto-init on the bench: roll/pitch converge to the table angle, mode reaches ATTITUDE_ONLY without GNSS.
+
+## Vibration check
+The datasheet gives no g-sensitivity or vibration rectification figure, so measure it. The method and the reference levels come from the AgOpenWeb-HAT evaluation (same document, §8.3–8.4, a TM171 on a three-cylinder tractor, 2026-11-08); the results are theirs, not measured on our hardware.
+
+- **What they measured on the tractor:** 18 mg rms at idle (peaks at 15, 22.5 and 45 Hz) and 43 mg rms at working revs (34.9, 52.2 and 204 Hz). At those levels the TM171's fused roll shifted by at most 0.14° and its gyro by under 4 mdps.
+- **What they measured under heavy shaking** (a sander, 1.5–1.8 g rms at about 80 Hz, far above cab level): the TM171's fused roll ramped to +3.2° in 100 s, because the accelerometer's mean moves (vibration rectification). The gyro shift stayed under 25 mdps.
+- **What it means here:** INSLIB uses the accelerometer for leveling and the vertical channel, so an accelerometer mean shift under vibration becomes a roll and pitch error. At cab levels it looks harmless; the mounting must keep the IMU away from the harsh levels. The 204 Hz component is well below the 400 Hz Nyquist limit of our 800 Hz sampling.
+- **Bench test:** fix the IMU plate rigidly to the body of a random-orbit sander, not to its pad. Sequence: tap, 60 s still, 120 s shaking, 60 s still, tap, at two or three intensities and in two orientations. The plate does not tilt, so any roll change is error.
+- **Tractor test:** engine off, idle and working revs for 5 min each at rest. The true roll is constant, so the shift when the engine starts is the error.
+- **Pass criteria (theirs, a reasonable start):** roll mean shift ≤ 0.2° from still to shaking, roll standard deviation ≤ 0.3° in 1 s windows, gyro mean shift ≤ 0.1 °/s. Log the INS roll and the raw accelerometer mean, and the vibration level, so runs can be compared.

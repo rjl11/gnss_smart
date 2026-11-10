@@ -78,7 +78,7 @@ Logs:
 5. **Run:** UART1 RX goes to the binary log parser. RTCM forwarding starts.
 
 **Command helper:**
-- Writes `cmd` + CRLF and waits up to 1 s for the matching `$command,…,response: OK`. Retries 3×, and logs failures.
+- Writes `cmd` + CRLF and waits up to 1 s for the matching `$command,…,response: OK`. Retries 3×, and logs failures. `SAVECONFIG` gets **10 s**: the AgOpenWeb-HAT daemon allows that long for it (see "Reference: UM98x replies and timings" below). Measure the real times on the bench and set both waits from them.
 - Binary logs and command replies share COM1, so the RX parser separates `$`/`#` ASCII lines from `AA 44 B5` binary frames.
 - Every step's result goes to the diagnostics page: state, last error, receiver serial number, firmware.
 
@@ -118,6 +118,17 @@ Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)
    - Whether SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
    - Whether a factory-new UM980 is already at SG 2. If so, there is no reboot after `CONFIG SIGNALGROUP 2`.
    - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md), "Comparison"), and that the parser rejects them.
+
+## Reference: UM98x replies and timings
+From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
+- **Reply formats** the fast-path text match has to handle:
+  - `CONFIG`: the `$command,…,response: OK` line, then one `$CONFIG,…` line per setting. The `$CONFIG,COM3,…` line is usually the last. The code ends the reply after it, or after 300 ms of silence.
+  - `MODE`: one `#MODE,…;…*` line.
+  - `UNILOGLIST`: lines that start with `<`. The first is the count (for example `<   3`), followed by that many log lines.
+- **Timeouts:** 5 s per command and 10 s for `SAVECONFIG`. Ours were 1 s for everything.
+- **Quiet read:** it sends `UNLOGALL COM1`, `UNLOGALL COM2`, `UNLOGALL COM3` before reading `CONFIG`, because the log stream gets in the way, and it notes that the read stops the GNSS stream for a few seconds. Our fast path reads `CONFIG` with BESTNAVB running, so check on the bench that the binary frames and the `$CONFIG` lines separate cleanly, or quiet the port first.
+- **`UNLOGALL` versus `UNLOG`:** it uses `UNLOGALL <port>`; our sequence uses `UNLOG <port>`. Check in the manual and on the bench which one clears every log on a port.
+- **Logs on before `SAVECONFIG`:** it restores the logs before saving, so the saved settings include them. Our provisioning does the same (logs in step 6, `SAVECONFIG` in step 7).
 
 ## Reference: a working receiver check
 The AiO v4.5 autosteer firmware at https://github.com/renatorgr/Boards (`Firmware/v4.5_AiO_WEB/zRxCheck.ino`, `zReceiver.ino` and the README's "Receiver check", read 2026-11-10, GPL v3) does the same job for a UM982 and u-blox receivers, and it runs on real boards. It is a reference for behaviour, not code to copy.

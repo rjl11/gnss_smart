@@ -26,7 +26,7 @@ Read from AgOpenWeb's `develop` branch at commit `e68dcfee` (2026-11-10): `Docs/
 - **Line format:** each datagram holds one or more whole lines, `$…*hh\r\n`. One line per datagram, sent as soon as it is complete, is preferred. NMEA checksum: 8-bit XOR of the bytes between `$` and `*`, two hex digits.
 
 ## Output format: `$PAOGI` at 10 Hz
-The device sends **only `$PAOGI`**, on a UM980 and on a UM982 alike. `$PANDA` is not sent (decision 2026-11-10): AgOpenWeb would treat its heading as a raw IMU heading and fuse it with its own fix-to-fix heading, although ours is already the INS yaw. A `$PAOGI` heading is taken as it is. The fields are below, numbered as in AgOpenWeb's parser:
+The device sends **only `$PAOGI`**, on a UM980 and on a UM982 alike. `$PANDA` is not sent (decision 2026-11-10): AgOpenWeb would treat its heading as a raw IMU heading and fuse it with its own fix-to-fix heading, although ours is already the INS yaw. A `$PAOGI` heading is taken as it is. The AgOpenWeb-HAT daemon makes the same choice: it sends `$PAOGI` whenever the receiver has a dual heading or an INS (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/nav.cpp`, commit `e4bd9ef`, read 2026-11-10). The fields are below, numbered as in AgOpenWeb's parser:
 
 ```
 $PAOGI,time,lat,N/S,lon,E/W,fix,sats,hdop,alt,age,speed,heading,roll,pitch,yaw_rate*XX
@@ -51,6 +51,7 @@ $PAOGI,time,lat,N/S,lon,E/W,fix,sats,hdop,alt,age,speed,heading,roll,pitch,yaw_r
 Pitfalls:
 - **Never send 0 for an unknown heading.** 0 is read as north, and AutoSteer would steer on it. Leave the field empty. `$PAOGI` has no 65535 sentinel; that belongs to `$PANDA`.
 - **Heading and roll are plain degrees**, not the ×10 integers of `$PANDA`.
+- **Number formats that are known to work** (the AgOpenWeb-HAT daemon's `$PAOGI`, `core/src/nav.cpp`): time as `hhmmss.s`, minutes of latitude and longitude with 6 decimals, altitude with 3 decimals, heading with 1 decimal, roll and yaw rate with 2, pitch as a whole number. Round the coordinates in whole units of the last digit before splitting degrees and minutes, so 59.9999999' carries into the degrees and never prints as 60. We use 7 decimals of minutes for 2 mm resolution, which the parser also accepts.
 - The sentence ID must be exactly `$PAOGI`, with no talker prefix.
 - All 15 fields must be present, so keep the commas of empty fields and send yaw rate even when it's 0.
 - **AgOpenWeb settings to check on the bench:** `$PAOGI` counts as a dual-antenna source, so its heading source must be set to dual, and its "Dual Heading Offset" stays 0 because the INS yaw is already the vehicle heading. The AiO v4.5 firmware at https://github.com/renatorgr/Boards (README, "Output to the program", read 2026-11-10) sends `$PAOGI` with AgOpenGPS's heading source set to "Dual", which supports this; AgOpenWeb's own setting is still to be checked.
@@ -66,6 +67,8 @@ Pitfalls:
 **Sign conventions (to verify on the bench):** heading clockwise from true north, roll positive with the right side down, yaw rate positive clockwise. Check each one against AgOpenWeb's display before trusting it. The AgOpenGPS V4.1 Teensy firmware (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/zHandlers.ino`, commit `f57c395`, read 2026-11-10) documents the same conventions for these sentences: roll positive with the right side down, pitch positive nose up, altitude always in metres above mean sea level. It writes the `$PAOGI` heading and roll with two decimals and sends a yaw rate of 0.
 
 **Not planned:** a choice of output sentence. `#INSPVAXA` (the Unicore INS log AgOpenWeb decodes for the UM981) would also hand over the INS solution as it is, but it has no HDOP or correction age and needs the Unicore header and a CRC-32. GGA+VTG+HPR would serve other AOG tools. Neither is needed while `$PAOGI` works. For reference, the AiO v4.5 firmware (same repo) switches to the standard set (`GGA`, `VTG`, `THS`, and `HPR` from an IMU talker, one line per datagram) while AgOpenWeb sends its hello, and to `$PAOGI` / `$PANDA` otherwise.
+
+**Later option: the lever arm from AgOpenWeb.** AgOpenWeb sends the vehicle geometry (antenna and IMU positions) in PGN 247. The AgOpenWeb-HAT daemon turns it into a UM981's INS lever arm (`core/include/aow/ins_setup.h`), only with steering off and the vehicle stopped, and only when it differs by more than 1 cm. The same message could fill our `gnss_leverarm_b` instead of typing it on the web config page. Its frame is X right, Y forward, Z up, so it needs converting to FRD. Not planned for the first Ethernet build.
 
 ## Hardware and pins
 | W5500 | Pico 2 W |
