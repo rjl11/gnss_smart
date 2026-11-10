@@ -127,6 +127,7 @@ A PC on the Zero's Wi-Fi opens a TCP connection to the Zero and gets the UM980 C
   - Keep both branches short. A series resistor on each branch is optional.
   - The PPS comes from the GNSS module's PPS pin, not straight from the UM980. Measure its level and drive strength on the module. Both boards expect 3.3 V logic.
 - **Software:** gpsd reads `/dev/ttyAMA0` and `/dev/pps0`, and chrony uses it.
+  - Run gpsd read-only (`-b`, plus `-n` so it reads without a client). By default gpsd writes probe strings to the device it opens, which would put non-RTCM bytes into COM2 RX and break the rule that the Zero writes only RTCM. Check with a logic analyser on COM2 RX that only RTCM frames appear.
   - `refclock SHM 0 refid NMEA noselect offset <calibrated>`
   - `refclock PPS /dev/pps0 lock NMEA refid PPS prefer`
   - `leapsectz right/UTC`

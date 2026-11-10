@@ -37,7 +37,7 @@ The S3 works best running its own firmware that owns the wireless features. Usin
   | Type | Direction | Content |
   |---|---|---|
   | `HELLO` | both, at boot | firmware and protocol version, so mismatched firmwares are detected |
-  | `POS` | Pico → S3 | the same fields as `$PANDA` (defined in the on-hold Ethernet plan), plus a status flag (aligning / navigating / paused) |
+  | `POS` | Pico → S3 | the same fields as `$PANDA` (defined in the on-hold Ethernet plan), plus the `nav_suite` mode (NONE / ATTITUDE_ONLY / COASTING / FULL) and a "paused" flag |
   | `DIAG` | Pico → S3 | the fields for the diagnostics page |
   | `CFG_GET` / `CFG_SET` / `CFG_ACK` | both | read, write and acknowledge the config struct |
   | `HEARTBEAT` | both, 1 Hz | liveness |

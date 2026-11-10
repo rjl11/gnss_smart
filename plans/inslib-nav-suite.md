@@ -19,7 +19,7 @@ What that buys over bare `ins`:
 - Same constraints as bare `ins`: no heap, all state in `nav_suite_t`, worst-case stack about 13 KB.
 
 ## Lifecycle (core 1)
-1. Wait for the receiver model from core 0 (UM980 or UM982), because it sets `automotive_mode`. The wait ends after 10 s at the latest, with the UM980 setting; a UM982 identified later triggers a re-init ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)). Then zero a static `nav_suite_t`, fill `ins_init_t` and `ins_options_t`, call `nav_suite_init()`.
+1. Wait for the receiver model from core 0 (UM980 or UM982), because it sets `automotive_mode`. The wait ends after 10 s at the latest (start value, not yet measured), with the UM980 setting; a UM982 identified later triggers a re-init ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)). Then zero a static `nav_suite_t`, fill `ins_init_t` and `ins_options_t`, call `nav_suite_init()`.
 2. Optionally tune `suite.ars_cfg` / `suite.ahrs_cfg` / `suite.baro_cfg` before the first update.
 3. Loop: pop one IMU sample (plus any GNSS/baro that arrived) from the core 0 queue, build an `ins_measurements_t`, call `nav_suite_update()`. One call per TM210 sample, so 800 calls per second. The strapdown runs every call; the covariance prediction runs at `kalman_update_dt_sec` (20 Hz).
 4. After the first usable GNSS fix, and again after moving far (e.g. 50 km), call `nav_suite_set_magnetic_model_position(lat, lon, year)`.
@@ -66,7 +66,7 @@ GNSS and baro samples are attached to the next IMU epoch after they arrive on co
 | Lat/lon/height | `ins` local position → `nav_suite_local_to_wgs84()`, height from `nav_suite_get_height_ellipsoid()` | `$PANDA`, BLE NMEA |
 | Heading, roll, pitch | `nav_suite_get_rpy()` | `$PANDA` (AgOpenWeb uses heading and roll) |
 | Speed | INS NED velocity → horizontal speed | `$PANDA`, RMC |
-| Fix quality | `nav_suite_get_mode()` combined with UM980 RTK status | GGA quality field: FULL keeps the RTK status, COASTING reports dead reckoning, ATTITUDE_ONLY/NONE no fix |
+| Fix quality | `nav_suite_get_mode()` combined with UM980 RTK status | GGA quality field: FULL keeps the RTK status, COASTING reports dead reckoning. In ATTITUDE_ONLY/NONE, GGA carries the UM980's own position and quality while the receiver has a fix, because SW Maps forwards GGA to the caster ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)); it reports no fix only when the receiver has none too |
 
 Antenna vs IMU vs vehicle reference point: output the position of the point AgOpenWeb expects (lever arm applied), not the IMU position.
 

@@ -11,7 +11,7 @@ This plan covers that link on the Pico 2 W (CYW43439 + BTstack) and the path fro
 ## One Bluetooth link, both directions
 | Direction | Content | Rate |
 |---|---|---|
-| Device → phone | NMEA: GGA and RMC at 10 Hz, plus GST/GSA if cheap | ~1.5–2 kB/s |
+| Device → phone | NMEA: GGA and RMC at 10 Hz, plus `$GNHDT` on a UM982 ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)) and GST/GSA if cheap | ~1.5–2 kB/s |
 | Phone → device | RTCM3 from the NTRIP caster | ~1–3 kB/s (MSM4/MSM7, 4 constellations, 1 Hz) |
 
 Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary chunks that don't line up with frame boundaries, so the firmware has to reassemble the frames.
