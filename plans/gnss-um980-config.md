@@ -130,6 +130,27 @@ From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `cor
 - **`UNLOGALL` versus `UNLOG`:** it uses `UNLOGALL <port>`; our sequence uses `UNLOG <port>`. Check in the manual and on the bench which one clears every log on a port.
 - **Logs on before `SAVECONFIG`:** it restores the logs before saving, so the saved settings include them. Our provisioning does the same (logs in step 6, `SAVECONFIG` in step 7).
 
+The original of that code is the AiO v26 ("New Dawn") Teensy firmware (https://github.com/AgOpenGPS-Official/Firmware_Teensy_AiO_26, `lib/aio_system/UM98xManager.cpp`, commit `2551bff`, read 2026-11-10, GPL v3). It adds three details; again facts from its code, and no code is taken:
+- **`MODE` is the only query it retries:** up to 3 times, 100 ms apart. The other queries are sent once. That suggests the `MODE` reply can get lost. Our command helper retries every command 3×, which covers it.
+- **An example `MODE` reply** from its comments: `#MODE,76,GPS,FINE,2382,246983200,0,0,18,47;MODE ROVER SURVEY,*2A`. The setting sits between the `;` and the `,*`.
+- **During a read or write** it stops its own GNSS parser, and it caps a reply line at 512 characters.
+
+### The AiO v26 default set for a UM981
+The same firmware's web page loads a default command set for a UM981, a single-antenna receiver with its own INS (`lib/aio_system/web_pages/SimpleUM98xConfigPage.h`). Beside our target table:
+
+| Item | AiO v26 UM981 default | This plan |
+|---|---|---|
+| Mode | `MODE ROVER SURVEY` | same |
+| Baud | `CONFIG COM1 460800`, `COM2 460800`, `COM3 460800` | same |
+| PPS | `CONFIG PPS ENABLE GPS POSITIVE 500000 1000 0 0` (500 ms wide) | same command, 100 ms wide |
+| Signals | `CONFIG SIGNALGROUP 1` | `CONFIG SIGNALGROUP 2` |
+| Doppler prediction | not set | `CONFIG PSRVELDRPOS DISABLE` |
+| Log | `INSPVAXA COM3 0.1` (the receiver's INS solution, 10 Hz) | `BESTNAVB COM1 0.05`, `STADOPB COM1 1` |
+| RTK | `CONFIG RTK TIMEOUT 120`, `CONFIG RTK RELIABILITY 3 1`, `CONFIG DGPS TIMEOUT 300` | not touched |
+| Other | `CONFIG BESTPARA 16.00 10.00`, `CONFIG RTCMB1CB2A ENABLE`, `CONFIG ANTIJAM AUTO`, `CONFIG AGNSS DISABLE`, `CONFIG NMEAVERSION V410`, `CONFIG ANTENNA POWERON`, `CONFIG ANTENNADELTAHEN 0.0000 0.0000 0.0000` | not touched |
+
+Its `CONFIG INS …`, `CONFIG IMUTOANT …`, `CONFIG INSSOL …` and `CONFIG INSDIRECTION AUTO` lines are for the UM981's own INS and don't apply to a UM980. The rate and the rover mode agree with ours, which is a second field source for 460800 on all three ports.
+
 ## Reference: a working receiver check
 The AiO v4.5 autosteer firmware at https://github.com/renatorgr/Boards (`Firmware/v4.5_AiO_WEB/zRxCheck.ino`, `zReceiver.ino` and the README's "Receiver check", read 2026-11-10, GPL v3) does the same job for a UM982 and u-blox receivers, and it runs on real boards. It is a reference for behaviour, not code to copy.
 - **Same flow:** search the baud rate, identify with `VERSIONA`, compare what the receiver has against a target list, write one command at a time, then `SAVECONFIG`. Its queries go between RTCM messages, never inside one, as our `um980_tx` arbiter does.

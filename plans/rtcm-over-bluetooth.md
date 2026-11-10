@@ -45,6 +45,11 @@ Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary
 - **Rejected alternative:** a PIO UART TX to COM2, locked with `CONFIG RXTYPE COM2 RTCM`. It keeps COM1 free of corrections, but it needs a port lock (bricking risk) and a second wire.
 - **Zero 2 W companion variant:** RTCM goes from the Zero's UART into COM2, but with **no** port lock. COM2 stays `AUTO` and the Zero writes only CRC-checked RTCM frames ([pico2-zero2w-usb-companion.md](pico2-zero2w-usb-companion.md)). The rejected variant above needed `RXTYPE`; this one doesn't.
 
+**Reference: how the AiO v26 firmware forwards RTCM.** The AgOpenGPS AiO v26 Teensy firmware (https://github.com/AgOpenGPS-Official/Firmware_Teensy_AiO_26, `lib/aio_system/RTCMProcessor.cpp` and `QNEthernetUDPHandler.cpp`, commit `2551bff`, read 2026-11-10, GPL v3) takes RTCM from UDP port 2233 or a radio and writes it to the receiver's UART at 460800. Facts from its code; no code is taken.
+- **No frame check:** it writes each datagram to the UART as raw bytes. Its only test is a length of at least 5 bytes. Our CRC-24Q check is stricter, and it is what lets commands and corrections share COM1.
+- **A field bug it fixed** (its issue #32, commit `bfa824f`): corrections were lost because the receive queue held one datagram, and a second one arriving before the next poll replaced the first. It now queues 8 datagrams.
+- **Never block on the UART:** since that fix it forwards one datagram per loop pass, and only when the UART TX buffer has at least 256 bytes free, so the write can't stall the main loop. The same rule applies to `um980_tx`: write a frame only when it fits, and let a burst wait in the ring buffer (4 KB here).
+
 ## Monitoring and failure behaviour
 - **Correction age and RTK status** come from BESTNAVB (differential age, position type), which the UM980 parser already reads.
 - **If Bluetooth drops:**

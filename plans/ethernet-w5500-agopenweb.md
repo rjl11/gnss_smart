@@ -52,6 +52,10 @@ Pitfalls:
 - **Never send 0 for an unknown heading.** 0 is read as north, and AutoSteer would steer on it. Leave the field empty. `$PAOGI` has no 65535 sentinel; that belongs to `$PANDA`.
 - **Heading and roll are plain degrees**, not the ×10 integers of `$PANDA`.
 - **Number formats that are known to work** (the AgOpenWeb-HAT daemon's `$PAOGI`, `core/src/nav.cpp`): time as `hhmmss.s`, minutes of latitude and longitude with 6 decimals, altitude with 3 decimals, heading with 1 decimal, roll and yaw rate with 2, pitch as a whole number. Round the coordinates in whole units of the last digit before splitting degrees and minutes, so 59.9999999' carries into the degrees and never prints as 60. We use 7 decimals of minutes for 2 mm resolution, which the parser also accepts.
+- **Three things to avoid**, seen in the AiO v26 Teensy firmware's `$PAOGI` builder, which the HAT formats above come from (https://github.com/AgOpenGPS-Official/Firmware_Teensy_AiO_26, `lib/aio_navigation/NAVProcessor.cpp`, `NMEAMessageBuilder.h` and `GNSSProcessor.cpp`, commit `2551bff`, read 2026-11-10, GPL v3):
+  - It hard-codes 18 leap seconds for GPS → UTC. Ours come from the binary header ([gnss-um980-config.md](gnss-um980-config.md)).
+  - It holds the GPS seconds of week in a 32-bit float. Above 524288 s (the last day of the week) a float's step is 1/16 s, too coarse for a 10 Hz time field. Keep time as integer milliseconds or a double.
+  - Its number formatter cuts off the extra decimals instead of rounding.
 - The sentence ID must be exactly `$PAOGI`, with no talker prefix.
 - All 15 fields must be present, so keep the commas of empty fields and send yaw rate even when it's 0.
 - **AgOpenWeb settings to check on the bench:** `$PAOGI` counts as a dual-antenna source, so its heading source must be set to dual, and its "Dual Heading Offset" stays 0 because the INS yaw is already the vehicle heading. The AiO v4.5 firmware at https://github.com/renatorgr/Boards (README, "Output to the program", read 2026-11-10) sends `$PAOGI` with AgOpenGPS's heading source set to "Dual", which supports this; AgOpenWeb's own setting is still to be checked.
@@ -63,6 +67,10 @@ Pitfalls:
 - Send 6 (dead reckoning) when GNSS has been missing for more than about 1 s while the INS is coasting. AgOpenWeb's fix validator has a minimum quality that decides whether a quality-6 fix is used (`Plans/GPS_RECEIVER_SENTENCES_PLAN.md`); check its setting on the bench.
 - Send 0 when the filter isn't navigating, and while output is paused for a config change (see [web-config-server.md](web-config-server.md)). On this channel, that takes the place of the status flag.
 - Send an empty heading field while the filter is aligning or its yaw is not valid, and an empty roll field while the attitude is not valid.
+- **What the AiO v26 firmware sends for a receiver with its own INS** (a UM981; `GNSSProcessor.cpp`, `parseINSPVAXA`, same repo and commit as above). It is a data point for the choice of 6, not a rule:
+  - The position type sets the quality: `INS_RTKFIXED` 4, `INS_RTKFLOAT` 5, `INS_PSRDIFF` 2, `INS_PSRSP` 1.
+  - A free-running INS (`INS_SOLUTION_FREE`) is sent as **1, not 6**, and `INS_INACTIVE` as 0. So AgOpenGPS setups fed by this firmware never see quality 6 from it. Whether AgOpenWeb steers on a 6 is still the bench check above.
+  - It sends `$PAOGI` during INS alignment even without a fix. Satellites (12) and HDOP (0.9) are fixed placeholders, because INSPVAXA has neither, and the age field carries INSPVAXA's "time since update". We have the real values from BESTNAVB and STADOPB.
 
 **Sign conventions (to verify on the bench):** heading clockwise from true north, roll positive with the right side down, yaw rate positive clockwise. Check each one against AgOpenWeb's display before trusting it. The AgOpenGPS V4.1 Teensy firmware (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/zHandlers.ino`, commit `f57c395`, read 2026-11-10) documents the same conventions for these sentences: roll positive with the right side down, pitch positive nose up, altitude always in metres above mean sea level. It writes the `$PAOGI` heading and roll with two decimals and sends a yaw rate of 0.
 
@@ -102,6 +110,7 @@ Pitfalls:
 - Path: UDP 2233 → ring buffer → RTCM3 frame check → the `um980_tx` arbiter → UART1 TX → UM980 **COM1**. This is the same path that Bluetooth RTCM uses, and no port is locked ([gnss-um980-config.md](gnss-um980-config.md)).
 - Bluetooth RTCM from the phone (SW Maps, [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)) goes into the same queue. Only one correction source may be active at a time; the arbiter takes frames from the selected source and drops the other's. The diagnostics page shows which source has delivered frames recently.
 - With this in place, AgOpenWeb's NTRIP client can replace the phone as the correction source.
+- **Hold several datagrams between polls.** The AiO v26 Teensy firmware lost corrections in the field because its receive queue held a single datagram; it now queues 8 (its issue #32; details in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md), "Path into the UM980"). AgOpenWeb's datagrams come 10–25 ms apart, so the W5500 socket's 2 KB RX buffer must be drained at least that often, or made larger.
 
 ## Discovery
 - Nothing is needed for v1, because AgOpenWeb learns the GPS source from the first `$` datagram.
@@ -109,6 +118,7 @@ Pitfalls:
   - Scan request, PGN 202 (0xCA): source 0x7F, length 3, data `202, 202, 5`, CRC.
   - Reply, PGN 203 (0xCB): source 0x78 (120, the GPS module), length 7, data = the four IP bytes and the first three subnet bytes, CRC.
   - Not yet tried against AgOpenWeb.
+  - The AiO v26 Teensy firmware's GPS module answers the same way (`GNSSProcessor.cpp`, `handleBroadcastPGN`, same repo and commit as above): the scan reply has this layout, with the first three IP bytes as the subnet bytes. It also answers the hello, PGN 200, with `80 81 78 78 05 00 00 00 00 00` + CRC (source 120, PGN 120, length 5).
 
 ## Cost (estimate, not yet measured)
 - CPU: negligible. The traffic is 10 × ~120 B/s out plus RTCM at ~1–2 kB/s in, over 30 MHz SPI.
