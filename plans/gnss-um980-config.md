@@ -117,3 +117,11 @@ Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)
    - At which baud the `CONFIG COM1` reply arrives.
    - Whether SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
    - Whether a factory-new UM980 is already at SG 2. If so, there is no reboot after `CONFIG SIGNALGROUP 2`.
+   - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md), "Comparison"), and that the parser rejects them.
+
+## Reference: a working receiver check
+The AiO v4.5 autosteer firmware at https://github.com/renatorgr/Boards (`Firmware/v4.5_AiO_WEB/zRxCheck.ino`, `zReceiver.ino` and the README's "Receiver check", read 2026-11-10, GPL v3) does the same job for a UM982 and u-blox receivers, and it runs on real boards. It is a reference for behaviour, not code to copy.
+- **Same flow:** search the baud rate, identify with `VERSIONA`, compare what the receiver has against a target list, write one command at a time, then `SAVECONFIG`. Its queries go between RTCM messages, never inside one, as our `um980_tx` arbiter does.
+- **Its timeouts:** it waits 5 s for valid data at 460800, and 15 s for a silent receiver, before it searches the baud rate. That is a field figure to set beside our 10 s start value for core 1's wait for the receiver model.
+- **A leading CR LF:** the V4.1 firmware it derives from (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/zGnss.ino`, commit `f57c395`, read 2026-11-10) sends every command as CR LF, the command, CR LF. The first CR LF ends whatever partial line or frame the receiver already holds. Our arbiter never interleaves, but the same prefix costs two bytes and protects the first command after boot or after dropped bytes; worth adding to the command helper.
+- **Differences:** it never sends `FRESET` on its own (its console asks before `FRESET`, `UNLOG` and baud changes), and a receiver found at another baud stays there until the settings are loaded. Our sequence starts with `FRESET` by the user's decision.

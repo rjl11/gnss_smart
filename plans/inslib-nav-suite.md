@@ -63,7 +63,7 @@ GNSS and baro samples are attached to the next IMU epoch after they arrive on co
 
 | Output | INSLIB call | Used by |
 |---|---|---|
-| Lat/lon/height | `ins` local position → `nav_suite_local_to_wgs84()`, height from `nav_suite_get_height_ellipsoid()` | `$PAOGI`, BLE NMEA |
+| Lat/lon/height | `ins` local position → `nav_suite_local_to_wgs84()`, height from `nav_suite_get_height_ellipsoid()`. GGA and `$PAOGI` carry height above mean sea level, so subtract the undulation from BESTNAVB (and put it in GGA's geoid separation field) | `$PAOGI`, BLE NMEA |
 | Heading, roll, pitch | `nav_suite_get_rpy()` | `$PAOGI` (AgOpenWeb uses heading and roll) |
 | Speed | INS NED velocity → horizontal speed | `$PAOGI`, RMC |
 | Fix quality | `nav_suite_get_mode()` combined with UM980 RTK status | GGA quality field: FULL keeps the RTK status, COASTING reports dead reckoning. In ATTITUDE_ONLY/NONE, GGA carries the UM980's own position and quality while the receiver has a fix, because SW Maps forwards GGA to the caster ([rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)); it reports no fix only when the receiver has none too |

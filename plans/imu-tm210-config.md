@@ -106,6 +106,17 @@ The library calls bits 26–31 "unused, must be 0", but bits 26–28 clearly do 
 - **`Ep_Combo` (CMD 43)** is a packed set of integers: gyro in 1e-5 rad/s, acc in 1e-5 g with the library's 1 g = 9.794 m/s², plus QoS, temperature and rate. It is not used. Raw (CMD 41, float32) keeps full resolution and is what [imu-tm210.md](imu-tm210.md) is built on.
 - **Start-up:** Auto boot gives a 3.2 s cold start, and Static boot 10–30 s. The TM210 answers requests even during its silent time.
 
+### Cross-check: the TM171 in the AiO v4.5 firmware
+An independent source for the same protocol: the AiO v4.5 autosteer firmware at https://github.com/renatorgr/Boards (`Firmware/v4.5_AiO_WEB/TM171.ino` and its README, read 2026-11-10, GPL v3). It reads and writes the Setting object of a **TM171**, checked on a real unit on 2026-10-24. These are their results on a TM171, not measurements on our TM210. Its code is GPL v3, so we take the facts, not the code.
+
+- **The layout matches ours:** baud at bytes 6–7 (×100 bps), inhibit time at 14–15 (read 10), **output rate in Hz at bytes 18–19**, switch bit 13 = 1 and bits 14–16 = 2. Their first guess also followed SYD's documents and was wrong in the same places.
+- **Writes need the node ID:** their TM171 answered requests sent to ID 0 but ignored every settings write sent that way. That agrees with writing to `toId = <node ID>`.
+- **Bytes 16–17: the two firmwares disagree.** Their unit read 0 there, and the renatorgr firmware concluded the TM171 has no Silent Time at that place. The firmware it was ported to, Balázs Gunics' V4.1 (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/TM171.ino`, commit `f57c395`, read 2026-11-10), reads the same bytes as the **power-on silent time in seconds** (0–65, the lower half of the guide's 32-bit word) and writes it from its web page. That is our reading too, and ours read 1. "Still to do" item 7 settles it for the TM210.
+- **Calibration commands:** the V4.1 file also holds a table of the Calibration object's types, control values and keys (CMD 23). We never send them, so it is only a reference if that decision changes.
+- **Baud change:** after a write that changes the baud, they switch their UART 300 ms later. We plan 50 ms (provision step 2), so try both on the bench.
+- **A guard worth copying as an idea:** before any write they check that bit 13 = 1, bits 14–16 = 2 and the baud word matches the rate they are talking at. If not, they report "layout not recognised" and write nothing. The same check in our provision step would stop a write to a TM210 firmware with a different layout.
+- **Baud scan:** they scan 460800, 230400, 921600, 57600, 38400 and 9600 after 115200.
+
 ## Target configuration
 Read-modify-write. Every field not listed is copied unchanged from the read-back.
 
@@ -137,7 +148,7 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
    - Compare the fields in the target table. Everything else is ignored, including bits 17/18, the sensor enables, the fusion fields, bytes 4–5, 8–9 and 14–15.
    - If they match and CMD 41 arrives at 800 ± 20 Hz over 1 s, configuration is done. Nothing is written to the TM210's flash, and boot takes about 1.3 s longer.
 3. **Provision.** Runs on any mismatch, or from the "Reconfigure IMU" button on the web page ([web-config-server.md](web-config-server.md)):
-   1. **Apply to RAM:** build the target from the read-back with bit 17 = 1 and bit 18 = 0. Send it to the node ID at the current baud and wait up to 1.5 s for the Ack (`cmdAck = 21`). Retry up to 5×.
+   1. **Apply to RAM:** first a layout guard: write only if the read-back has switch bit 13 = 1, bits 14–16 = 0b010 and a baud word that matches the rate in use (the values read on our TM210 and on the AiO firmware's TM171). Otherwise report "layout not recognised" with the raw bytes and stay in the error state. Then build the target from the read-back with bit 17 = 1 and bit 18 = 0. Send it to the node ID at the current baud and wait up to 1.5 s for the Ack (`cmdAck = 21`). Retry up to 5×.
    2. **New baud:** if the baud changed, switch UART0 to 921600 and wait 50 ms. Read the settings back: the target fields must match.
    3. **Check the output:** only CMD 41 packets, at 800 ± 20 Hz over 2 s, with zero CRC errors.
    4. **Commit to flash:**

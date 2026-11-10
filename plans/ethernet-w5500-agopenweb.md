@@ -40,7 +40,7 @@ $PAOGI,time,lat,N/S,lon,E/W,fix,sats,hdop,alt,age,speed,heading,roll,pitch,yaw_r
 | 6 | fix | see "Fix quality" below | raw integer, GGA scale |
 | 7 | sats | from the UM980 | raw |
 | 8 | hdop | from the UM980 | raw |
-| 9 | alt | metres | raw |
+| 9 | alt | metres **above mean sea level**, as in GGA: the INS ellipsoid height minus the receiver's undulation | raw |
 | 10 | age | age of corrections, seconds. **Leave it empty when there are no corrections** | raw; empty shows "—" instead of 0.0 |
 | 11 | speed | knots | ×0.514444 → m/s |
 | 12 | heading | INS yaw in degrees, float (0–359.99). **Empty while the heading is not valid** | float, taken as the dual-antenna heading with no host fusion. Empty = no heading this epoch, and AgOpenWeb falls back to its fix-to-fix heading |
@@ -53,7 +53,7 @@ Pitfalls:
 - **Heading and roll are plain degrees**, not the ×10 integers of `$PANDA`.
 - The sentence ID must be exactly `$PAOGI`, with no talker prefix.
 - All 15 fields must be present, so keep the commas of empty fields and send yaw rate even when it's 0.
-- **AgOpenWeb settings to check on the bench:** `$PAOGI` counts as a dual-antenna source, so its heading source must be set to dual, and its "Dual Heading Offset" stays 0 because the INS yaw is already the vehicle heading.
+- **AgOpenWeb settings to check on the bench:** `$PAOGI` counts as a dual-antenna source, so its heading source must be set to dual, and its "Dual Heading Offset" stays 0 because the INS yaw is already the vehicle heading. The AiO v4.5 firmware at https://github.com/renatorgr/Boards (README, "Output to the program", read 2026-11-10) sends `$PAOGI` with AgOpenGPS's heading source set to "Dual", which supports this; AgOpenWeb's own setting is still to be checked.
 
 **Position point:** send the INS position at the **GNSS antenna** (the solution propagated through the IMU → antenna lever arm), not at the IMU. AgOpenWeb applies its own antenna-height roll compensation and pivot offsets, so sending a point that's already been moved would correct it twice.
 
@@ -63,9 +63,9 @@ Pitfalls:
 - Send 0 when the filter isn't navigating, and while output is paused for a config change (see [web-config-server.md](web-config-server.md)). On this channel, that takes the place of the status flag.
 - Send an empty heading field while the filter is aligning or its yaw is not valid, and an empty roll field while the attitude is not valid.
 
-**Sign conventions (to verify on the bench):** heading clockwise from true north, roll positive with the right side down, yaw rate positive clockwise. Check each one against AgOpenWeb's display before trusting it.
+**Sign conventions (to verify on the bench):** heading clockwise from true north, roll positive with the right side down, yaw rate positive clockwise. Check each one against AgOpenWeb's display before trusting it. The AgOpenGPS V4.1 Teensy firmware (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/zHandlers.ino`, commit `f57c395`, read 2026-11-10) documents the same conventions for these sentences: roll positive with the right side down, pitch positive nose up, altitude always in metres above mean sea level. It writes the `$PAOGI` heading and roll with two decimals and sends a yaw rate of 0.
 
-**Not planned:** a choice of output sentence. `#INSPVAXA` (the Unicore INS log AgOpenWeb decodes for the UM981) would also hand over the INS solution as it is, but it has no HDOP or correction age and needs the Unicore header and a CRC-32. GGA+VTG+HPR would serve other AOG tools. Neither is needed while `$PAOGI` works.
+**Not planned:** a choice of output sentence. `#INSPVAXA` (the Unicore INS log AgOpenWeb decodes for the UM981) would also hand over the INS solution as it is, but it has no HDOP or correction age and needs the Unicore header and a CRC-32. GGA+VTG+HPR would serve other AOG tools. Neither is needed while `$PAOGI` works. For reference, the AiO v4.5 firmware (same repo) switches to the standard set (`GGA`, `VTG`, `THS`, and `HPR` from an IMU talker, one line per datagram) while AgOpenWeb sends its hello, and to `$PAOGI` / `$PANDA` otherwise.
 
 ## Hardware and pins
 | W5500 | Pico 2 W |

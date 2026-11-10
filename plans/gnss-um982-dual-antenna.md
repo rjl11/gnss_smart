@@ -124,6 +124,30 @@ The same as for the UM980 ([rtos-decision.md](rtos-decision.md)):
 - On core 0: UNIHEADINGB parsing, the baseline gate and the offset.
 - On core 1: nothing new except reading `m.yaw` and the per-model `automotive_mode` choice at init.
 
+## Comparison: the AgOpenGPS UM982 settings
+The AiO v4.5 autosteer firmware at https://github.com/renatorgr/Boards (read 2026-11-10, GPL v3) loads the AgOpenGPS file `ConfigUM982D.txt` into a UM982 (`Firmware/v4.5_AiO_WEB/zRxConfig.h`, `RXCFG_UM982D`, 27 commands, then `SAVECONFIG`). It is a field-used command set for the same receiver, so it is a useful check on ours. It is not a measurement on our module, and it changes none of our decisions.
+
+| Item | AgOpenGPS file | This plan |
+|---|---|---|
+| Signals | `CONFIG SIGNALGROUP 4 5` | `3 6` on build ≥ 10979 |
+| Heading mode | `CONFIG HEADING TRACTOR`, then `CONFIG HEADING VARIABLELENGTH` | `VARIABLELENGTH` only |
+| Heading reliability | `CONFIG HEADING RELIABILITY 3` | default (3), not sent |
+| Heading offset | `CONFIG HEADING OFFSET 90.0 0.0` | not sent; the firmware applies `baseline_yaw_b` |
+| Heading smoothing | `CONFIG SMOOTH HEADING 0` | not sent |
+| Mode | `MODE ROVER SURVEY` | same |
+| PPS | `CONFIG PPS ENABLE GPS POSITIVE 500000 1000 0 0` | same, with a 100 ms pulse |
+| Ports | COM1, COM2, COM3 at 460800 | same |
+| RTK | `CONFIG RTK TIMEOUT 600`, `CONFIG RTK RELIABILITY 3 1`, `CONFIG DGPS TIMEOUT 600` | not touched (module default `RTK TIMEOUT 60`) |
+| Other | `CONFIG MMP ENABLE`, `CONFIG SBAS DISABLE`, `CONFIG ANTIJAM AUTO`, `CONFIG AGNSS DISABLE`, `CONFIG RTCMB1CB2A ENABLE`, `CONFIG SMOOTH RTKHEIGHT 0` | not touched |
+| Output | NMEA `GPGGA`, `GPHPR` (and others) at 10 Hz | binary BESTNAVB, STADOPB, UNIHEADINGB at 20 Hz |
+
+Points to take from it:
+- **`TRACTOR` and `VARIABLELENGTH` are both sent**, `TRACTOR` first. The manual lists them as modes of one command, so the second probably replaces the first, but that is not confirmed. Check with `CONFIG` after sending both when comparing the two modes on the bench.
+- **A second data point for `TRACTOR`:** Balázs Gunics' V4.1 firmware (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/zWebPage.h`, `HPR_SETUP`, commit `f57c395`, read 2026-11-10) sets a UM982 up with `CONFIG HEADING TRACTOR` alone, plus `CONFIG HEADING OFFSET 90.0 0.0`, `CONFIG HEADING RELIABILITY 3` and `MODE HEADING2 TRACTOR`. It uses the heading only when the `HPR` quality is 4 (fixed baseline) and drops it after 1 s without `HPR`, the same rule as our `m.yaw.is_valid`.
+- **`CONFIG RTK TIMEOUT`** decides how long the receiver keeps an RTK solution after corrections stop. AgOpenGPS raises it to 600 s; the module ships with 60 s. INSLIB bridges outages itself, so the short default suits us, but it should be a deliberate entry in the target table once tested.
+- **`CONFIG MMP ENABLE`** (multipath mitigation) is worth a bench comparison near the cab roof.
+- **A quirk seen in the field:** a UM982 GGA can arrive with `00` satellites and HDOP `9999.0`, and that firmware holds the last good values for up to 2 s. Watch for the same epochs in BESTNAVB and STADOPB; our gating on solution status should already reject them.
+
 ## Bench results (2026-11-06, UM982 module on a PC over USB-C)
 The module was connected to a PC through its USB-C port (CH340 USB-serial bridge, Windows COM10). Only read-only queries and one-shot logs were sent, and nothing was saved. The antennas weren't connected or had no sky view: BESTNAV and UNIHEADING reported `INSUFFICIENT_OBS`, so heading, rate and fix tests are still open.
 
@@ -169,7 +193,7 @@ The module was connected to a PC through its USB-C port (CH340 USB-serial bridge
 7. **Open questions to settle:**
    - The position-type values that mean a fixed heading.
    - The heading latency against BESTNAV in the same epoch.
-   - VARIABLELENGTH against TRACTOR behaviour.
+   - VARIABLELENGTH against TRACTOR behaviour, and what `CONFIG` shows after both are sent (the AgOpenGPS file sends both).
    - The 5 V current of each module at 20 Hz positioning + heading (the datasheet's 600 mW is for 10 Hz).
    - The module's COM1 and PPS logic level (3.3 V expected).
    - Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together.
