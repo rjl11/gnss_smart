@@ -37,6 +37,15 @@ git submodule update --init --recursive
 
 Not a submodule: `external/syd_dynamics` is a plain vendored copy of SYD Dynamics' TransducerM examples and the TM210 3D model. It is the EasyProfile protocol reference for the TM210 (see its `README.md`), and it is not compiled. `temp/` is git-ignored scratch space.
 
+## Build host (miniPi)
+
+Pico SDK builds run on `miniPi`, a Raspberry Pi with only 415 MB of RAM, which you reach as `ssh robert@miniPi` over Tailscale. The SDK is in `~/pico/pico-sdk` (2.3.1), picotool 2.3.1 is in `~/.local/bin`, and `~/pico/pico-examples` is the test project.
+
+- **Set `CMAKE_BUILD_PARALLEL_LEVEL=1` and use `ninja -j1`.** The SDK builds host tools (`pioasm`, and `picotool` when it isn't found) as nested CMake projects with their own `cmake --build`. These ignore the outer `-j1` and run about 5 C++ compiles at once. That pushes the load to 10+, makes the Pi swap until it stops responding, and caused the hard freezes in Nov 2026. The nested builds follow `CMAKE_BUILD_PARALLEL_LEVEL`.
+- **A 2 GB swap file (`/var/swap`) is required.** The default zram swap of about 415 MB ran out and froze the Pi. It is set in `/etc/rpi/swap.conf.d/90-build.conf` with `Mechanism=swapfile` and `FixedSizeMiB=2048`. rpi-swap only accepts `swapfile`, `zram`, `zram+file`, `auto` and `none`, and silently treats anything else as `auto`.
+- **Use OpenSSH with a key, not Tailscale SSH.** Tailscale SSH is turned off (`tailscale set --ssh=false`) because it uses about 50 MB per connection, against about 10 MB for OpenSSH. A new client needs its key added to `~/.ssh/authorized_keys` on the Pi.
+- **Run long builds with `nohup nice -n 10 ... > log`, and watch them over one SSH connection.** Don't reconnect every 30 s. `~/pico/powerlog.sh` logs throttling, temperature, load, memory, swap and the largest processes every 5 s to `~/pico/powerlog.txt`, with an fsync after each line so the log survives a freeze. The journal isn't kept across reboots.
+
 ## Git
 
 Work only on `main`. Don't create branches, worktrees or pull requests; commit straight to `main`.
