@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-GNSS + IMU fusion firmware for an survey and agricultural (AgOpenGPS / AgOpenWeb) navigation unit. The project is mostly in the planning stage. `plans/` holds the design, and `firmware/` so far has only the BMP581 barometer driver. No top-level firmware project, build or tests exist yet.
+GNSS + IMU fusion firmware for an survey and agricultural (AgOpenGPS / AgOpenWeb) navigation unit. `plans/` holds the design. `firmware/` holds a first demo (sensor bring-up and INSLIB fused output, status on USB, no Bluetooth yet). It builds, but as of 2026-11-11 it has not run on hardware. There are no tests yet.
 
 The target system (see `plans/README.md` for the index):
 - **MCU:** Raspberry Pi Pico 2 W (RP2350 + CYW43439), Pico SDK, bare metal. FreeRTOS may come later on core 0 only (`plans/rtos-decision.md`).
@@ -19,6 +19,22 @@ The target system (see `plans/README.md` for the index):
 - **Core 0:** UART DMA, the sensor parsers, the BMP581 driver, Bluetooth (BTstack via `pico_cyw43_arch_threadsafe_background`) and the RTCM forwarder. Write this code as separate modules with queues between them, so a later move to FreeRTOS stays small.
 - Take sample timestamps (`time_us_64()`) in the ISR or DMA-complete handler, not when the sample is processed. INSLIB handles measurement delay but needs accurate capture times.
 - Put the filter's hot path in SRAM (`__not_in_flash_func` / `copy_to_ram`) for deterministic timing.
+
+## Firmware layout and build
+
+- `firmware/CMakeLists.txt` is the project (board `pico2_w`, `copy_to_ram`, stdio on USB only, because UART0 is the TM210).
+- `firmware/app/`: `main.c` (core 0 loop and the 1 Hz status report), `nav_core1.c` (the filter on core 1 and its queues), `app_config.h` (mounting, noise figures, options).
+- **Every pin, bus instance and baud rate is in `firmware/app/board_pins.h`.** No other file names a GPIO number; drivers get their pins through their config structs.
+- `firmware/drivers/`: `uart_dma` (DMA ring receive, polled transmit), `tm210` and `um980` (parser plus boot check/provision state machine each), `bmp581`, `inslib` (CMake wrapper around `external/INSLIB`).
+
+Build on the Windows PC (reload `Path`, `PICO_SDK_PATH`, `picotool_DIR` and `pioasm_DIR` from the User environment first if the shell is stale):
+
+```bash
+cmake -S firmware -B firmware/build -G Ninja
+ninja -C firmware/build
+```
+
+The output is `firmware/build/app.uf2` (and `app.elf` for SWD). On miniPi, follow the rules under "Build host" below.
 
 ## Drivers
 
