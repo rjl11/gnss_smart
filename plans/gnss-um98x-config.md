@@ -35,7 +35,7 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 | Minimum build (`MODE ROVER`, §3.4) | 7923 | 7650 |
 | Antennas | 1 | 2: ANT1 (master), ANT2 (slave) |
 | Signal groups (§4.48) | 1, 2, 8, 10; one parameter only | two parameters (master, slave): `4 5` (default), `3 6`, `5 0`, `7 0`. Our build 18975 accepts exactly these (bench results 2026-11-12) |
-| Max output rate | 50 Hz on SG 8 only (UM980 HW Table 1-1: "supports 50 Hz in specific mode"); 20 Hz standard | 20 Hz RTK + heading (HW Table 1-1, product brief); no 50 Hz option |
+| Max output rate | 50 Hz on SG 8 only (UM980 HW Table 1-1: "supports 50 Hz in specific mode"); 20 Hz standard | 20 Hz RTK + heading (HW Table 1-1, product brief); no 50 Hz option. On `7 0`, `BESTNAVB COM3 0.02` is refused ("Period 0.02 is not supported for this log message") and `0.05` gives 20 Hz (bench results 2026-11-12) |
 | GNSS heading | no | yes, on by default (§1.3) |
 | Cold start (TTFF) | < 12 s (UM980 HW Table 1-1) | < 30 s (product brief) |
 | Power (bare part, 3.3 V) | 145 mA typical, **180 mA maximum**, 480 mW (UM980 HW Table 2-3) | 180 mA typical, **300 mA maximum**, 600 mW (HW Table 2-4) |
@@ -124,7 +124,7 @@ What this means here:
 ## Target configuration
 | Item | UM980 single | UM982 single | UM982 dual | Why |
 |---|---|---|---|---|
-| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979, else `4 5` (same as dual) | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979 (as the module ships), else `4 5` | All constellations and frequencies. The UM982 refuses `2 0` (bench results 2026-11-12), so UM982 single keeps the dual group and leaves the heading unused (no `CONFIG HEADING`, no UNIHEADINGB). `5 0` and `7 0` are accepted and turn the slave off. On the sky, `7 0` tracks the most master signals (about 119, against about 110 on `3 6`) but no Galileo E6; its BESTNAVB rate isn't checked (bench results 2026-11-12, sky test). Confirm 20 Hz on the bench |
+| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979, else `4 5` (same as dual) | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979 (as the module ships), else `4 5` | All constellations and frequencies. The UM982 refuses `2 0` (bench results 2026-11-12), so UM982 single keeps the dual group and leaves the heading unused (no `CONFIG HEADING`, no UNIHEADINGB). `5 0` and `7 0` are accepted and turn the slave off. On the sky, `7 0` tracks the most master signals (about 119, against about 110 on `3 6`) but no Galileo E6, and gives BESTNAVB at 20 Hz with the plan's logs (bench results 2026-11-12, sky test and `7 0` rate test). Confirm 20 Hz on `3 6` too |
 | Heading mode | — | not sent | `CONFIG HEADING VARIABLELENGTH` | See "VARIABLELENGTH and the mount" |
 | Heading reliability, offset | — | — | not sent (default 3, offset 0) | The firmware applies `baseline_yaw_b` itself |
 | Rover mode | `MODE ROVER SURVEY` | same | same | The manual's mode for precision agriculture and survey. Set explicitly so a different firmware default doesn't matter |
@@ -281,7 +281,7 @@ Not done yet:
    - At which baud the `CONFIG COM1` reply arrives.
    - Whether UM980 SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
    - ~~Whether the UM982 accepts `SIGNALGROUP 2 0`.~~ It doesn't (bench results 2026-11-12), so the target table's fallback is used.
-   - Whether `7 0` would serve UM982 single mode better than `3 6`. Tracking is settled (bench results 2026-11-12, sky test): `7 0` gains BDS B2a and B2b and loses Galileo E6. Still open: its BESTNAVB rate, and which of those signals the NTRIP base sends (E6 only helps RTK if the base sends it).
+   - Whether `7 0` would serve UM982 single mode better than `3 6`. Tracking is settled (bench results 2026-11-12, sky test): `7 0` gains BDS B2a and B2b and loses Galileo E6. Its BESTNAVB rate is 20 Hz (bench results 2026-11-12, `7 0` rate test). Still open: which of those signals the NTRIP base sends (E6 only helps RTK if the base sends it), and 20 Hz with RTCM coming in.
    - Which signals ANT2 tracks in groups 6 and 5 (the sky test had no slave antenna). Group 6 is expected to lack GLONASS, which matters for heading.
    - Whether `CONFIG SBAS ENABLE` makes the receiver track EGNOS. No SBAS was tracked in any group.
    - Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together. If not, try SG 4 5 and record what changes.
@@ -372,6 +372,25 @@ Signals per epoch, mean of both runs (C/N0 was 35–45 dB-Hz throughout and does
 - **No SBAS in any group.** `CONFIG` listed no SBAS item, and `CONFIG SBAS ENABLE` wasn't tried.
 - **After `FRESET`:** `SIGNALGROUP 4 5`, every port at 115200, `MODE ROVER UAV`. A plain `MODE ROVER` also reads back `MODE ROVER UAV`, so the target table's explicit `MODE ROVER SURVEY` is needed to get the survey profile.
 - Script: Python with `termios` (no pyserial on miniPi). It parses OBSVMB as 40-byte records after a 4-byte count (§7.5.67) and checks the CRC-32 of each frame.
+
+## Bench results (2026-11-12, UM982 on `7 0`: baud, E6 and navigation rate)
+Same module and setup as the sky test (master antenna only, on the sky, miniPi over USB-C).
+
+- **Config saved:** `CONFIG SIGNALGROUP 7 0`, then `CONFIG COM1 460800`, `CONFIG COM2 460800`, `CONFIG COM3 460800` and `SAVECONFIG`, all OK. The `CONFIG COM3` reply didn't arrive at the old baud (115200); the receiver answered at 460800 at once. After two `RESET`s it came back at 460800 on `7 0`, so the save holds. The mode stays `MODE ROVER UAV` (factory default). The module is left in this state.
+- **No E6 on `7 0`, confirmed.** Over 120 epochs at 1 Hz, Galileo showed only signal codes 2 (E1C), 12 (E5a) and 17 (E5b), about 10 satellites each. Codes 18 (E6B) and 22 (E6C) never appeared. `CONFIG PPP ENABLE E6-HAS` is refused on `7 0` (`PARSING FAILED GRAMMAR ERROR,Type error, does not su[pport]…`). That matches the R1.16 change log: E6-HAS and MADOCA-PPP in SG 3 6, B2b-PPP in SG 7.
+- **Navigation rate** (40 s per row, BESTNAVB header times, CRC-checked, solution `SINGLE` throughout, no RTCM):
+
+| Logs on COM3 | Rate | Epoch spacing | Receiver CPU idle |
+|---|---|---|---|
+| `BESTNAVB 0.1` | 10.0 Hz | 100 ms, all | 84 % |
+| `BESTNAVB 0.05` | 19.5 Hz | 50 ms, plus one 1 s gap | 70 % |
+| `BESTNAVB 0.05`, `STADOPB 1`, `HWSTATUSB 1` (the target set) | 19.5 Hz | 50 ms, plus one 1 s gap | 70 % |
+| the same plus `OBSVMB 1` | 20.0 Hz | 50 ms, all | 70 % |
+| `BESTNAVB 0.02` | refused: `PARSING FAILED FIELD OUT OF RANGE,Period 0.02 is not supported for this log message!` | — | — |
+
+  - **20 Hz is the maximum.** Each of two runs had one 1 s gap (about 20 epochs missing). The cause isn't known; the parser and the filter must tolerate it.
+  - CPU idle is header byte 3 (§7.5.1). It drops from 84 % at 10 Hz to 70 % at 20 Hz, and the extra logs don't move it.
+- **miniPi loses data at 460800.** With the receiver at 460800, about 20 % of the bytes never arrived: most binary frames failed the CRC, and `CONFIG` text came back with pieces missing. Raw `cat` of the port lost the same, so the script isn't the cause. The kernel log shows `dwc_otg_hcd_urb_dequeue: Timed out waiting for FSM NP transfer`, which points at miniPi's USB host or the CH340 at that rate. At 115200 nothing was lost, so the E6 and rate figures above were taken with COM3 set to 115200 without `SAVECONFIG`, then `RESET` back to the saved 460800. The Pico uses COM1 over its UART, so this doesn't affect the firmware. A PC on the USB-C port at 460800 hasn't been checked.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
