@@ -4,6 +4,10 @@
 #include "hardware/gpio.h"
 #include "pico/time.h"
 
+/* The DMA transfer count, reloaded each time it runs out. A multiple of every
+ * ring size, so the count modulo the ring size is the write index. */
+#define RX_DMA_COUNT        (1u << 24)
+
 bool uart_dma_init(uart_dma_t *u, uart_inst_t *uart, unsigned tx_pin, unsigned rx_pin,
                    unsigned baud, uint8_t *rx_buf, unsigned rx_size_bits)
 {
@@ -14,6 +18,8 @@ bool uart_dma_init(uart_dma_t *u, uart_inst_t *uart, unsigned tx_pin, unsigned r
     u->rx_wr = 0;
     u->rx_snap_us = 0;
     u->overruns = 0;
+    u->rx_count = 0;
+    u->rx_overflows = 0;
     u->tx_head = 0;
     u->tx_tail = 0;
     u->tx_dropped = 0;
@@ -39,18 +45,29 @@ bool uart_dma_init(uart_dma_t *u, uart_inst_t *uart, unsigned tx_pin, unsigned r
     channel_config_set_dreq(&c, uart_get_dreq(uart, false));
 
     dma_channel_configure((unsigned)u->dma_ch, &c, rx_buf, &uart_get_hw(uart)->dr,
-                          dma_encode_endless_transfer_count(), true);
+                          dma_encode_transfer_count_with_self_trigger(RX_DMA_COUNT), true);
     return true;
 }
 
-static inline uint32_t rx_write_index(const uart_dma_t *u)
+/* Bytes received so far, modulo RX_DMA_COUNT. The channel reloads its count
+ * and goes on when it reaches zero, so the count never stops. */
+static inline uint32_t rx_byte_count(const uart_dma_t *u)
 {
-    return (dma_hw->ch[u->dma_ch].write_addr - (uintptr_t)u->rx_buf) & u->rx_mask;
+    uint32_t left = dma_hw->ch[u->dma_ch].transfer_count & DMA_CH0_TRANS_COUNT_COUNT_BITS;
+    return (RX_DMA_COUNT - left) & (RX_DMA_COUNT - 1u);
 }
 
 uint64_t uart_dma_rx_snapshot(uart_dma_t *u)
 {
-    u->rx_wr = rx_write_index(u);
+    uint32_t count = rx_byte_count(u);
+    uint32_t unread = ((u->rx_wr - u->rx_rd) & u->rx_mask) +
+                      ((count - u->rx_count) & (RX_DMA_COUNT - 1u));
+    u->rx_count = count;
+    u->rx_wr = count & u->rx_mask;
+    if (unread > u->rx_mask) { /* the ring was lapped: what it holds is mixed */
+        u->rx_overflows++;
+        u->rx_rd = u->rx_wr;
+    }
     u->rx_snap_us = time_us_64();
 
     uart_hw_t *hw = uart_get_hw(u->uart);
@@ -63,7 +80,8 @@ uint64_t uart_dma_rx_snapshot(uart_dma_t *u)
 
 void uart_dma_rx_flush(uart_dma_t *u)
 {
-    u->rx_wr = rx_write_index(u);
+    u->rx_count = rx_byte_count(u);
+    u->rx_wr = u->rx_count & u->rx_mask;
     u->rx_rd = u->rx_wr;
 }
 

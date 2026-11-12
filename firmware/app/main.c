@@ -193,8 +193,11 @@ static void print_status(uint64_t now)
                    (double)o.gyr_bias[0], (double)o.gyr_bias[1], (double)o.gyr_bias[2],
                    (double)o.acc_bias[0], (double)o.acc_bias[1], (double)o.acc_bias[2]);
         }
-        printf("      epochs: imu %lu  gnss %lu (late %lu)  baro %lu\n", (unsigned long)o.n_updates,
-               (unsigned long)o.n_gnss, (unsigned long)o.n_gnss_late, (unsigned long)o.n_baro);
+        printf("      epochs: imu %lu  gnss %lu (late %lu)  baro %lu (late %lu)\n",
+               (unsigned long)o.n_updates, (unsigned long)o.n_gnss, (unsigned long)o.n_gnss_late,
+               (unsigned long)o.n_baro, (unsigned long)o.n_baro_late);
+        printf("      rx ring overflows: imu %lu  gnss %lu\n",
+               (unsigned long)s_imu_port.rx_overflows, (unsigned long)s_gnss_port.rx_overflows);
     }
 }
 

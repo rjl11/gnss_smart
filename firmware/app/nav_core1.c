@@ -28,7 +28,8 @@ static nav_output_t s_out;                 /* guarded by s_out_lock */
 static volatile nav_receiver_t s_model;
 static volatile uint32_t s_drops;
 
-static uint32_t s_stack[APP_CORE1_STACK_BYTES / sizeof(uint32_t)];
+/* AAPCS wants the stack pointer on an 8-byte boundary. */
+static uint32_t s_stack[APP_CORE1_STACK_BYTES / sizeof(uint32_t)] __attribute__((aligned(8)));
 
 /* Core 1 only. */
 static nav_suite_t s_suite;
@@ -45,6 +46,12 @@ static void log_sink(int level, const char *file, int line, const char *fmt, va_
 {
     static const char *const k_level[] = { "", "FATAL", "ERROR", "WARN", "INFO" };
     char msg[LOG_MSG_LEN];
+    /* File name only: the build's absolute path would fill the message. */
+    for (const char *p = file; *p != '\0'; p++) {
+        if (*p == '/' || *p == '\\') {
+            file = p + 1;
+        }
+    }
     int n = snprintf(msg, sizeof msg, "%s %s:%d: ", k_level[(level >= 1 && level <= 4) ? level : 0],
                      file, line);
     if (n > 0 && (size_t)n < sizeof msg) {
@@ -177,9 +184,15 @@ static void core1_main(void)
     uint64_t next_publish = time_us_64() + PUBLISH_PERIOD_US;
 
     for (;;) {
-        if (s_model != model && s_model != NAV_RX_UNKNOWN) {
-            model = s_model;
-            filter_init(model);
+        /* A filter started without a model runs with the single-antenna
+         * setting, so only a change to or from dual antenna restarts it. */
+        nav_receiver_t new_model = s_model;
+        if (new_model != model && new_model != NAV_RX_UNKNOWN) {
+            bool restart = (new_model == NAV_RX_DUAL_ANTENNA) != (model == NAV_RX_DUAL_ANTENNA);
+            model = new_model;
+            if (restart) {
+                filter_init(model);
+            }
         }
 
         if (queue_try_remove(&s_imu_q, &imu)) {
@@ -206,9 +219,15 @@ static void core1_main(void)
                 attach_gnss(&m, &gnss);
             }
             if (queue_try_remove(&s_baro_q, &baro)) {
-                m.baro.pressure_pa = baro.pressure_pa;
-                m.baro.is_valid = true;
-                s_work.n_baro++;
+                /* The barometer has no delay compensation in INSLIB, so a
+                 * sample that waited in the queue is not fused as current. */
+                if ((int64_t)imu.t_us - (int64_t)baro.t_us > APP_BARO_MAX_AGE_US) {
+                    s_work.n_baro_late++;
+                } else {
+                    m.baro.pressure_pa = baro.pressure_pa;
+                    m.baro.is_valid = true;
+                    s_work.n_baro++;
+                }
             }
 
             uint64_t t0 = time_us_64();
@@ -259,7 +278,22 @@ static bool push(queue_t *q, const void *item)
     return false;
 }
 
-bool nav_push_imu(const nav_imu_t *s) { return push(&s_imu_q, s); }
+/* A dropped sample's dt is added to the next one, so the filter integrates
+ * over the whole interval and not only over the last sample period. */
+bool nav_push_imu(const nav_imu_t *s)
+{
+    static float s_lost_dt_s; /* core 0 only */
+    nav_imu_t n = *s;
+
+    n.dt_s += s_lost_dt_s;
+    if (push(&s_imu_q, &n)) {
+        s_lost_dt_s = 0.0f;
+        return true;
+    }
+    s_lost_dt_s = n.dt_s;
+    return false;
+}
+
 bool nav_push_gnss(const nav_gnss_t *s) { return push(&s_gnss_q, s); }
 bool nav_push_baro(const nav_baro_t *s) { return push(&s_baro_q, s); }
 

@@ -97,6 +97,7 @@ typedef struct {
     unsigned  step;          /* sub-step inside a state                       */
     uint64_t  deadline_us;
     bool      need_commit;   /* a RAM write happened, flash still differs     */
+    unsigned  commit_attempts; /* flash writes tried since the last success   */
     bool      got_setting;
     bool      got_ack;
     uint16_t  node_id;
@@ -114,6 +115,7 @@ typedef struct {
     uint64_t  off_win_end_us;
     bool      off_prev_valid;
     uint64_t  last_raw_us;   /* arrival of the last CMD 41                    */
+    uint64_t  last_out_us;   /* t_us of the last sample given out             */
 
     float     last_mag[3];
     uint64_t  next_status_us;

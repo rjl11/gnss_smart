@@ -472,10 +472,13 @@ void um980_cfg_step(um980_t *g, uint64_t now)
                 g->serial);
             if (g->model != UM980_PRODUCT_UM980 || g->build < UM980_MIN_BUILD) {
                 /* The UM982 variant is recognised, but this build only has the
-                 * UM980 target table (plans/gnss-um982-dual-antenna.md). */
+                 * UM980 target table (plans/gnss-um982-dual-antenna.md).
+                 * Nothing is written to it: it is used as it is. */
                 g->last_error = UM980_E_UNSUPPORTED;
-                LOG(g, "error: %s", um980_strerror(UM980_E_UNSUPPORTED));
-                enter_detect(g, now, DETECT_RETRY_US);
+                LOG(g, "error: %s, running with the receiver as it is",
+                    um980_strerror(UM980_E_UNSUPPORTED));
+                g->degraded = true;
+                enter_run(g, now);
             } else if (g->baud == UM980_TARGET_BAUD) {
                 enter(g, UM980_ST_CHECK);
             } else if (g->proving) {

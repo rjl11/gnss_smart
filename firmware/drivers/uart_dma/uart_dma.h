@@ -34,6 +34,8 @@ typedef struct {
     uint32_t     rx_wr;       /* write index at the last snapshot           */
     uint64_t     rx_snap_us;  /* time_us_64() of the last snapshot          */
     uint32_t     overruns;    /* UART FIFO overruns seen                    */
+    uint32_t     rx_count;    /* DMA byte counter at the last snapshot      */
+    uint32_t     rx_overflows; /* times the ring was lapped; data discarded */
 
     uint8_t      tx_buf[UART_DMA_TX_SIZE];
     uint32_t     tx_head;

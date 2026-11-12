@@ -58,6 +58,7 @@
 #define DETECT_RETRY_US         2000000u
 #define ACK_WAIT_US             1500000u
 #define ACK_RETRIES             5u
+#define MAX_COMMIT_ATTEMPTS     2u /* flash writes before running from RAM */
 #define READBACK_RETRIES        3u
 #define BAUD_SWITCH_WAIT_US     300000u
 #define CHECK_WINDOW_US         1000000u
@@ -264,6 +265,10 @@ static bool handle_raw(tm210_t *t, const uint8_t *p, tm210_sample_t *out)
     }
 
     out->t_us = (uint64_t)((int64_t)t->t_imu_us + off - PACKET_TX_TIME_US);
+    if (out->t_us <= t->last_out_us) {
+        out->t_us = t->last_out_us + 1u; /* a falling offset must not turn time back */
+    }
+    t->last_out_us = out->t_us;
     out->dt_s = (float)delta * 1e-6f;
     out->gap = delta > GAP_US;
     if (out->gap) {
@@ -403,6 +408,21 @@ static void enter_run(tm210_t *t, uint64_t now)
     t->next_status_us = now + 1000000u;
 }
 
+/* Goes to COMMIT, or to RUN on the RAM settings once the flash write has
+ * failed too often, so a problem cannot turn into endless flash writes. */
+static void enter_commit(tm210_t *t, uint64_t now)
+{
+    if (t->commit_attempts >= MAX_COMMIT_ATTEMPTS) {
+        int err = t->last_error;
+        LOG(t, "saving to flash failed %u times: running on the RAM settings", MAX_COMMIT_ATTEMPTS);
+        enter_run(t, now);
+        t->last_error = err;
+        return;
+    }
+    t->commit_attempts++;
+    enter(t, TM210_ST_COMMIT);
+}
+
 /* Sends a Setting request and waits for the reply. Returns 1 when the reply
  * is in t->setting, -1 when all retries timed out, 0 while waiting. */
 static int readback_step(tm210_t *t, uint64_t now)
@@ -439,7 +459,8 @@ static int write_step(tm210_t *t, uint64_t now, bool save_to_flash)
         return 1;
     }
     if (now >= t->deadline_us) {
-        if (++t->retries >= ACK_RETRIES) {
+        /* A flash write is not repeated here: enter_commit() counts them. */
+        if (save_to_flash || ++t->retries >= ACK_RETRIES) {
             return -1;
         }
         t->step = 0;
@@ -497,7 +518,7 @@ static void step(tm210_t *t, uint64_t now)
         }
         if (window_ok(t, 1)) {
             if (t->need_commit) {
-                enter(t, TM210_ST_COMMIT);
+                enter_commit(t, now);
             } else {
                 LOG(t, "settings already match, nothing written");
                 enter_run(t, now);
@@ -569,7 +590,7 @@ static void step(tm210_t *t, uint64_t now)
             break;
         }
         if (window_ok(t, 2)) {
-            enter(t, TM210_ST_COMMIT);
+            enter_commit(t, now);
         } else {
             LOG(t, "output check failed: %lu raw, %lu other packets, %lu CRC errors in 2 s",
                 (unsigned long)t->win_raw, (unsigned long)t->win_other,
@@ -593,6 +614,7 @@ static void step(tm210_t *t, uint64_t now)
             fail(t, now, TM210_E_READBACK);
         } else if (r > 0) {
             t->need_commit = false;
+            t->commit_attempts = 0;
             t->stats.provisions++;
             LOG(t, "settings saved to flash. Boot mode Auto applies from the next power cycle");
             enter_run(t, now);
@@ -632,6 +654,7 @@ void tm210_init(tm210_t *t, uart_dma_t *port, const tm210_config_t *cfg)
 void tm210_reconfigure(tm210_t *t)
 {
     t->need_commit = false;
+    t->commit_attempts = 0;
     enter_detect(t, time_us_64(), 0);
 }
 

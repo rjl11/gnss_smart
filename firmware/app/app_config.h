@@ -39,6 +39,10 @@
  * with the UM980 setting (start value, not yet measured). */
 #define APP_MODEL_WAIT_MS           10000
 
+/* A barometer sample older than this when it reaches the filter is dropped
+ * (start value, not yet measured). */
+#define APP_BARO_MAX_AGE_US         100000
+
 /* Core 1 stack. nav_suite_update() needs about 13 KB worst case. */
 #define APP_CORE1_STACK_BYTES       (32 * 1024)
 

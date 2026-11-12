@@ -73,6 +73,7 @@ typedef struct {
     uint32_t n_gnss;       /* GNSS epochs given to the filter               */
     uint32_t n_gnss_late;  /* GNSS epochs dropped: older than INSLIB's limit */
     uint32_t n_baro;
+    uint32_t n_baro_late;  /* barometer samples dropped: too old            */
     uint32_t update_us_max;  /* longest nav_suite_update() since the last report */
     uint32_t update_us_mean; /* mean over the same interval                 */
     uint32_t n_reinit;     /* filter (re)initialisations                    */
