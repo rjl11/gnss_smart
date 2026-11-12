@@ -78,6 +78,7 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - UM980 SG 2 covers GPS L1C/A L1C L2C L2P L5, BDS B1I B3I B1C B2a B2b, GLO G1 G2 G3, GAL E1 E5a E5b E6, QZSS L1C/A L1C L2C L5 L1S, NavIC L5 and SBAS.
   - On the UM980 only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`), but check on the bench that SG 2 really delivers it.
   - Table 4-61 lists only `4 5` (default) and `3 6` in its UM982 row. R1.16 adds a UMD982 row with `4 5`, `3 6`, `5 0` and `7 0`, the same four values our UM982 accepts. With **SG 3 6**, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests". `2 0`, the user's choice for UM982 single mode, isn't in the table, and the UM982 refuses it. Build 18975 accepts exactly `3 6`, `4 5`, `5 0` and `7 0` (bench results 2026-11-12).
+  - Table 4-60 doesn't match what build 18975 tracks on the master in two places (bench results 2026-11-12, sky test): group 7 tracks no Galileo E6, though the table lists it, and group 3 tracks BDS B1C, not B2a, as footnote 6 says for builds before 23575.
   - The manual says an omitted second parameter becomes 0 on a dual-antenna product. On the UM982 that holds only for `5` and `7`, where `x 0` is valid anyway. Every other master-only form gets a grammar error, `4` included. Always send both parameters.
 - **RTCM on the command port:**
   - In rover mode the receiver identifies RTCM input by itself (§3.1).
@@ -123,7 +124,7 @@ What this means here:
 ## Target configuration
 | Item | UM980 single | UM982 single | UM982 dual | Why |
 |---|---|---|---|---|
-| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979, else `4 5` (same as dual) | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979 (as the module ships), else `4 5` | All constellations and frequencies. The UM982 refuses `2 0` (bench results 2026-11-12), so UM982 single keeps the dual group and leaves the heading unused (no `CONFIG HEADING`, no UNIHEADINGB). `5 0` and `7 0` are accepted and turn the slave off, but their signal sets and rates aren't checked. Confirm 20 Hz on the bench |
+| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979, else `4 5` (same as dual) | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979 (as the module ships), else `4 5` | All constellations and frequencies. The UM982 refuses `2 0` (bench results 2026-11-12), so UM982 single keeps the dual group and leaves the heading unused (no `CONFIG HEADING`, no UNIHEADINGB). `5 0` and `7 0` are accepted and turn the slave off. On the sky, `7 0` tracks the most master signals (about 119, against about 110 on `3 6`) but no Galileo E6; its BESTNAVB rate isn't checked (bench results 2026-11-12, sky test). Confirm 20 Hz on the bench |
 | Heading mode | — | not sent | `CONFIG HEADING VARIABLELENGTH` | See "VARIABLELENGTH and the mount" |
 | Heading reliability, offset | — | — | not sent (default 3, offset 0) | The firmware applies `baseline_yaw_b` itself |
 | Rover mode | `MODE ROVER SURVEY` | same | same | The manual's mode for precision agriculture and survey. Set explicitly so a different firmware default doesn't matter |
@@ -280,7 +281,9 @@ Not done yet:
    - At which baud the `CONFIG COM1` reply arrives.
    - Whether UM980 SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
    - ~~Whether the UM982 accepts `SIGNALGROUP 2 0`.~~ It doesn't (bench results 2026-11-12), so the target table's fallback is used.
-   - Whether `5 0` or `7 0` would serve UM982 single mode better than `3 6` (which signals they track, and the BESTNAVB rate).
+   - Whether `7 0` would serve UM982 single mode better than `3 6`. Tracking is settled (bench results 2026-11-12, sky test): `7 0` gains BDS B2a and B2b and loses Galileo E6. Still open: its BESTNAVB rate, and which of those signals the NTRIP base sends (E6 only helps RTK if the base sends it).
+   - Which signals ANT2 tracks in groups 6 and 5 (the sky test had no slave antenna). Group 6 is expected to lack GLONASS, which matters for heading.
+   - Whether `CONFIG SBAS ENABLE` makes the receiver track EGNOS. No SBAS was tracked in any group.
    - Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together. If not, try SG 4 5 and record what changes.
    - Whether a factory-new receiver is already at the target signal group. If so, there is no reboot after `CONFIG SIGNALGROUP`.
    - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). If `CONFIG` only lists non-default items, the fast-path text match must allow for that.
@@ -334,6 +337,41 @@ Same module, build 18975, on COM10 through the USB-C port (COM3). At the start i
 - **The second parameter is required**, except for `5` and `7`.
 - **The reboot takes about 10 s** from the OK until `VERSION` answers again: a 3 s pause, then 6–7 s of probing. The 15 s wait in the boot sequence is enough.
 - Script: a Python/pyserial loop over the commands. It sends each one, waits up to 3 s for the `$command` reply, and after an OK probes `VERSION` once a second (60 s limit) before reading `CONFIG`.
+
+## Bench results (2026-11-12, UM982 signal-group sky test)
+Same module, build 18975, on miniPi over the USB-C port (COM3, `/dev/ttyUSB0`, 115200). Only the master antenna (ANT1) was connected, with a clear sky view, so these are master-antenna figures only. Each accepted group was measured twice, in the order `3 6`, `4 5`, `5 0`, `7 0`, `7 0`, `5 0`, `4 5`, `3 6` (19:22–19:52 local time), so the change in the sky over the run roughly evens out. For each run the script set the group, waited for the reboot, waited 150 s for tracking to settle, then decoded 60 epochs of `OBSVMB COM3 1` (1 Hz). It counted each satellite × signal with a measurement, and how many of those had carrier-phase lock (tracking status bit 10). Signal type and system come from the tracking status word (Table 7-182). At the end the script sent `FRESET`.
+
+| Group | Satellites | Signals (run 1 / run 2) | Phase-locked |
+|---|---|---|---|
+| `7 0` | 40 / 41 | **117 / 121** | 111 / 114 |
+| `3 6` | 40 / 38 | 112 / 107 | 109 / 102 |
+| `4 5` | 40 / 37 | 96 / 89 | 92 / 86 |
+| `5 0` | 40 / 37 | 79 / 75 | 73 / 72 |
+
+Signals per epoch, mean of both runs (C/N0 was 35–45 dB-Hz throughout and doesn't separate the groups):
+
+| Signal | `3 6` | `4 5` | `5 0` | `7 0` |
+|---|---|---|---|---|
+| GPS L1C/A | 10.5 | 10.5 | 10.9 | 11.0 |
+| GPS L2C / L2P | 8.5 / 2.0 | 8.5 / 2.0 | 8.9 / 2.0 | 8.8 / 2.0 |
+| GPS L5 | 6.0 | 6.0 | — | 6.5 |
+| GLO G1 / G2 | 8.0 / 7.0 | 7.8 / 7.2 | 8.0 / 7.2 | 8.0 / 6.7 |
+| GAL E1 / E5b | 9.9 / 10.0 | 9.5 / 9.5 | 9.0 / 9.0 | 11.0 / 11.0 |
+| GAL E5a | 10.0 | 9.5 | — | 11.0 |
+| GAL E6 | 9.0 | — | — | — |
+| BDS B1I / B3I | 10.5 / 10.5 | 10.5 / 10.5 | 10.5 / 10.2 | 10.5 / 10.5 |
+| BDS B2I | — | 1.0 | 1.0 | 1.0 |
+| BDS B1C | 7.5 | — | — | 7.0 |
+| BDS B2a / B2b | — | — | — | 7.0 / 7.0 |
+| SBAS, QZSS, NavIC | — | — | — | — |
+
+- **Every group sees the same satellites.** The difference between them is signals per satellite.
+- **`7 0` tracks the most signals** but **no Galileo E6**, against Table 4-60. It is the only group with BDS B2a and B2b.
+- **`3 6` is the only group with Galileo E6.** Its BDS third frequency is B1C, not B2a (footnote 6, build < 23575).
+- **`5 0` drops GPS L5 and Galileo E5a**, so it is a dual-frequency group.
+- **No SBAS in any group.** `CONFIG` listed no SBAS item, and `CONFIG SBAS ENABLE` wasn't tried.
+- **After `FRESET`:** `SIGNALGROUP 4 5`, every port at 115200, `MODE ROVER UAV`. A plain `MODE ROVER` also reads back `MODE ROVER UAV`, so the target table's explicit `MODE ROVER SURVEY` is needed to get the survey profile.
+- Script: Python with `termios` (no pyserial on miniPi). It parses OBSVMB as 40-byte records after a 4-byte count (§7.5.67) and checks the CRC-32 of each frame.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
