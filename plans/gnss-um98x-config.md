@@ -128,7 +128,7 @@ What this means here:
 | Heading mode | — | not sent | `CONFIG HEADING VARIABLELENGTH` | See "VARIABLELENGTH and the mount" |
 | Heading reliability, offset | — | — | not sent (default 3, offset 0) | The firmware applies `baseline_yaw_b` itself |
 | Rover mode | `MODE ROVER SURVEY` | same | same | The manual's mode for precision agriculture and survey. Set explicitly so a different firmware default doesn't matter |
-| Doppler prediction | `CONFIG PSRVELDRPOS DISABLE` | same | same | No fake fixes into INSLIB, which does its own prediction |
+| Doppler prediction | `CONFIG PSRVELDRPOS DISABLE` | same | same | No fake fixes into INSLIB, which does its own prediction. On the UM980, `CONFIG` lists it once it is set (either value) and not before (bench results 2026-11-12, UM980 CONFIG listing) |
 | PVT engine | `CONFIG PVTALG MULTI` | same | same | Dual-frequency standalone solution (§4.35, Table 4-45). The default is MULTI on the UM980 but SINGLE on the UM982, so it is set on both. `CONFIG` lists `PVTALG MULTI` once it is set; with the default, no line appears (seen on the UM980, 2026-11-12) |
 | PPS | `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0` | same | same | 1 Hz, rising edge, 100 ms wide. `ENABLE` outputs PPS only once time has converged, so there are no edges before time is valid (§4.32) |
 | Port locks | none: `CONFIG RXTYPE` is never sent | same | same | Risk of bricking. All ports stay at the default AUTO |
@@ -289,7 +289,7 @@ Not done yet:
    - ~~What causes the occasional 1 s gap in BESTNAVB.~~ It is a start-up effect: after the log commands, the receiver sends one BESTNAVB on the whole second and the 20 Hz stream starts one second later. In steady state no epoch was lost in 10 min (bench results 2026-11-12, UM980 gap capture). Seen on the UM980; the UM982 results came from the same script, so the same cause is very likely there.
    - Whether a factory-new receiver is already at the target signal group. If so, there is no reboot after `CONFIG SIGNALGROUP`.
    - Whether the UM982 accepts `CONFIG PVTALG MULTI` and then lists it in `CONFIG`, as the UM980 does. The fast-path check requires the line, so a UM982 that doesn't list it would be re-provisioned on every boot (up to the two-attempt limit).
-   - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). If `CONFIG` only lists non-default items, the fast-path text match must allow for that.
+   - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). The UM980 accepts it and lists it once set, with either value (bench results 2026-11-12, UM980 CONFIG listing). Still open on the UM980: whether the line is still listed after `SAVECONFIG` and a power cycle. Until both are known, the firmware keeps treating a missing line as unknown and resends the command on entering Run.
    - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ("Comparison: the AgOpenGPS UM982 settings"), and that the parser rejects them. None in 10 min on the UM980 indoors (15 to 19 satellites in the solution throughout, bench results 2026-11-12, UM980 gap capture); still to watch for on the UM982 and in the field.
    - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value. On the UM980 (already warm) it read about 60 000 and rose from 59.9 to 61.1 over 10 min (bench results 2026-11-12, UM980 gap capture), which fits °C × 1000; the cold-start reading and the thermometer check are still open.
    - The UNIHEADING position-type values that mean a fixed heading, and the heading latency against BESTNAV in the same epoch.
@@ -481,6 +481,24 @@ Same UM980 (R4.10Build25621) on miniPi over COM3 at 115200, with its five 1 Hz N
 - **OK and GRAMMAR ERROR match the UM982.** The other forms are new; the firmware only needs to tell `response: OK` from anything else, and it does.
 - **The echo repeats the command as sent**, so the firmware could check that a reply belongs to the command it is waiting for. It doesn't check that yet. A late reply to an earlier command could be taken for the current one; with replies in about 150 ms and a 1 s wait, that is unlikely.
 - **Replies take 133–196 ms** at 115200 with NMEA running, well inside the firmware's 1 s wait. `SAVECONFIG` and the reply delay at 460800 on COM1 are still to be measured.
+
+## Bench results (2026-11-12, UM980 CONFIG listing)
+Same UM980 (R4.10Build25621, SG 2) on miniPi over COM3 at 115200. Each command below was sent without `SAVECONFIG`, then `CONFIG` was read and compared with the line before. At the end, `RESET` brought back the saved state: the same 19 `$CONFIG` lines as at the start (the [as-received config](../docs/receiver-configs/um980-as-received-2026-11-12.md)), SG 2 and the five NMEA logs.
+
+| Sent | Reply | `CONFIG` afterwards |
+|---|---|---|
+| (start) | — | 19 lines, no PSRVELDRPOS, no PVTALG |
+| `CONFIG PSRVELDRPOS DISABLE` | OK | `$CONFIG,PSRVELDRPOS,CONFIG PSRVELDRPOS DISABLE` added |
+| `CONFIG PSRVELDRPOS ENABLE` | OK | the line changes to `ENABLE` |
+| `CONFIG PSRVELDRPOS DISABLE` | OK | back to `DISABLE` |
+| `CONFIG PVTALG MULTI` | OK | `$CONFIG,PVTALG,CONFIG PVTALG MULTI` added |
+| `CONFIG PVTALG SINGLE` | OK | the line changes to `SINGLE` |
+| `CONFIG PVTALG MULTI` | OK | back to `MULTI` |
+| `RESET` | OK | 19 lines, identical to the start |
+
+- **`CONFIG` lists an item once it has been set, with any value, including the default.** An item never set since the last load doesn't appear. So "not listed" means "not set", not "set to the default".
+- **The new lines come in the middle of the reply**, after `DGPS` and before `RTCMB1CB2A`. `COM1`, `COM2` and `COM3` stay at the end, so `$CONFIG,COM3` is still the last line. The firmware ends the reply after 300 ms of silence, so it doesn't depend on this order.
+- **For the firmware:** on a UM980 that has been provisioned, `PSRVELDRPOS DISABLE` would be listed, so it could become a required fast-path item like PVTALG. It stays optional for now, as in `firmware/drivers/um980/um980_cfg.c`, until the UM982 has been checked and it is confirmed that the line survives `SAVECONFIG` and a power cycle. That check changes the saved configuration, so it was left out.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
