@@ -21,7 +21,7 @@ Decisions fixed by the user:
 - **Dual-antenna heading mode is `CONFIG HEADING VARIABLELENGTH`**: the receiver does not hold the baseline length fixed.
 
 Sources:
-- `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.16.pdf` (Oct. 2026). Section numbers below refer to it. Against R1.15 (`…_R1.15.pdf`, Jun. 2026), nothing this plan uses changed: the UNIHEADING, HWSTATUS, BESTNAV, PSRVELDRPOS and PPS sections and the position-type values read the same. Three log sections moved: STADOP §7.5.96 → §7.5.98, UNIHEADING §7.5.99 → §7.5.101, and UNILOGLIST §7.5.101 → §7.5.103.
+- `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.16.pdf` (Oct. 2026). Section numbers below refer to it. Against R1.15 (Jun. 2026, removed from `docs/`; still in git history), nothing this plan uses changed: the UNIHEADING, HWSTATUS, BESTNAV, PSRVELDRPOS and PPS sections and the position-type values read the same. Three log sections moved: STADOP §7.5.96 → §7.5.98, UNIHEADING §7.5.99 → §7.5.101, and UNILOGLIST §7.5.101 → §7.5.103.
 - `docs/datasheets/UM980_Datasheet.pdf` and `docs/datasheets/UM980_User Manual_EN_R1.10.pdf` (UM980 hardware manual R1.10, 2026-06). Section and table numbers marked "UM980 HW" refer to the manual.
 - `docs/datasheets/um982-user-manual-en-r1-1.pdf` (UM982 hardware manual R1.1, 2022-09). Section and table numbers marked "HW" refer to it.
 - `docs/UM982_Product_Brief_En_mail.pdf` (UM982 product brief) and `docs/PRECISION PRODUCTS LIST 2026_En.pdf` (Unicore's 2026 product list). Marketing sheets: used only where they agree with or update the manuals.
