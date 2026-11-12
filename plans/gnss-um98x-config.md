@@ -35,12 +35,12 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 | Minimum build (`MODE ROVER`, §3.4) | 7923 | 7650 |
 | Antennas | 1 | 2: ANT1 (master), ANT2 (slave) |
 | Signal groups (§4.48) | 1, 2, 8, 10; one parameter only | two parameters (master, slave): `4 5` (default), `3 6`, `5 0`, `7 0`. Our build 18975 accepts exactly these (bench results 2026-11-12) |
-| Max output rate | 50 Hz on SG 8 only (UM980 HW Table 1-1: "supports 50 Hz in specific mode"); 20 Hz standard | 20 Hz RTK + heading (HW Table 1-1, product brief); no 50 Hz option. On `7 0`, `BESTNAVB COM3 0.02` is refused ("Period 0.02 is not supported for this log message") and `0.05` gives 20 Hz (bench results 2026-11-12) |
+| Max output rate | 50 Hz on SG 8 only (UM980 HW Table 1-1: "supports 50 Hz in specific mode"); 20 Hz standard. On SG 2, `BESTNAVB COM3 0.05` gives 20 Hz and `0.02` is refused (bench results 2026-11-12) | 20 Hz RTK + heading (HW Table 1-1, product brief); no 50 Hz option. On `7 0`, `BESTNAVB COM3 0.02` is refused ("Period 0.02 is not supported for this log message") and `0.05` gives 20 Hz (bench results 2026-11-12) |
 | GNSS heading | no | yes, on by default (§1.3) |
 | Cold start (TTFF) | < 12 s (UM980 HW Table 1-1) | < 30 s (product brief) |
 | Power (bare part, 3.3 V) | 145 mA typical, **180 mA maximum**, 480 mW (UM980 HW Table 2-3) | 180 mA typical, **300 mA maximum**, 600 mW (HW Table 2-4) |
 | UART logic | LVTTL at VCC (3.0–3.6 V): in high ≥ 0.7 VCC, out high ≥ VCC − 0.45 V at 2 mA (UM980 HW Table 2-4) | LVTTL (product brief) |
-| Firmware build | latest we have: R4.10Build25621; our module's build not yet read | R4.10Build18975, the latest we have and the one our module runs. See "Receiver firmware builds" |
+| Firmware build | R4.10Build25621, the latest we have and the one our module runs (read 2026-11-12, [as-received config](../docs/receiver-configs/um980-as-received-2026-11-12.md)) | R4.10Build18975, the latest we have and the one our module runs. See "Receiver firmware builds" |
 
 This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs nothing here.
 
@@ -76,7 +76,7 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - It reboots the receiver only if the value changes, and it saves itself without `SAVECONFIG`. That is why the manual says to send it before the other settings.
   - The first parameter is the master antenna's group, the second the slave's. **`0` disables the slave antenna** (Table 4-60). On a dual-antenna product an omitted second parameter is set to 0. A single-antenna product rejects a second parameter with an error.
   - UM980 SG 2 covers GPS L1C/A L1C L2C L2P L5, BDS B1I B3I B1C B2a B2b, GLO G1 G2 G3, GAL E1 E5a E5b E6, QZSS L1C/A L1C L2C L5 L1S, NavIC L5 and SBAS.
-  - On the UM980 only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`), but check on the bench that SG 2 really delivers it.
+  - On the UM980 only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`). SG 2 delivers it with the target logs (bench results 2026-11-12, UM980 rate test).
   - Table 4-61 lists only `4 5` (default) and `3 6` in its UM982 row. R1.16 adds a UMD982 row with `4 5`, `3 6`, `5 0` and `7 0`, the same four values our UM982 accepts. With **SG 3 6**, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests". `2 0`, the user's choice for UM982 single mode, isn't in the table, and the UM982 refuses it. Build 18975 accepts exactly `3 6`, `4 5`, `5 0` and `7 0` (bench results 2026-11-12).
   - Table 4-60 doesn't match what build 18975 tracks on the master in two places (bench results 2026-11-12, sky test): group 7 tracks no Galileo E6, though the table lists it, and group 3 tracks BDS B1C, not B2a, as footnote 6 says for builds before 23575.
   - The manual says an omitted second parameter becomes 0 on a dual-antenna product. On the UM982 that holds only for `5` and `7`, where `x 0` is valid anyway. Every other master-only form gets a grammar error, `4` included. Always send both parameters.
@@ -278,15 +278,15 @@ Not done yet:
 9. **Open questions to settle on the bench:**
    - The acknowledgement and error text on a UM980 (confirmed on a UM982).
    - That the UM980 module has the same port mapping as the UM982 module (USB-C = COM3, pins = COM1 and COM2).
-   - The UM980 module's firmware build (`VERSIONA COM3`). If it is below 25621, flash `docs/firmware/unicore/um980/UM980_R4.10Build25621.pkg` with UPrecise and record the build before and after.
+   - ~~The UM980 module's firmware build.~~ It runs R4.10Build25621, the latest we have, so no flash is needed (2026-11-12).
    - At which baud the `CONFIG COM1` reply arrives.
-   - Whether UM980 SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
+   - ~~Whether UM980 SG 2 really gives 20 Hz.~~ It does (bench results 2026-11-12, UM980 rate test), so SG 8 isn't needed.
    - ~~Whether the UM982 accepts `SIGNALGROUP 2 0`.~~ It doesn't (bench results 2026-11-12), so the target table's fallback is used.
    - Whether `7 0` would serve UM982 single mode better than `3 6`. Tracking is settled (bench results 2026-11-12, sky test): `7 0` gains BDS B2a and B2b and loses Galileo E6. Its BESTNAVB rate is 20 Hz (bench results 2026-11-12, `7 0` rate test). Still open: which of those signals the NTRIP base sends (E6 only helps RTK if the base sends it), and 20 Hz with RTCM coming in.
    - Which signals ANT2 tracks in groups 6 and 5 (the sky test had no slave antenna). Group 6 is expected to lack GLONASS, which matters for heading.
    - Whether `CONFIG SBAS ENABLE` makes the receiver track EGNOS. No SBAS was tracked in any group.
    - ~~Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together.~~ It does without a slave antenna (bench results 2026-11-12, `3 6` rate test). Repeat with ANT2 connected and a real heading solution.
-   - What causes the occasional 1 s gap in BESTNAVB (one missing second about once a minute, on `3 6` and `7 0`, with any log set). Log 10 min and look for a pattern (ToDo in [TODO.md](../TODO.md)).
+   - What causes the occasional 1 s gap in BESTNAVB (one missing second about once a minute, on the UM982 on `3 6` and `7 0` and on the UM980 on SG 2, with any log set). Log 10 min and look for a pattern (ToDo in [TODO.md](../TODO.md)).
    - Whether a factory-new receiver is already at the target signal group. If so, there is no reboot after `CONFIG SIGNALGROUP`.
    - Whether the UM982 accepts `CONFIG PVTALG MULTI` and then lists it in `CONFIG`, as the UM980 does. The fast-path check requires the line, so a UM982 that doesn't list it would be re-provisioned on every boot (up to the two-attempt limit).
    - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). If `CONFIG` only lists non-default items, the fast-path text match must allow for that.
@@ -410,6 +410,22 @@ Same setup (master antenna only, on the sky; slave antenna not connected). The s
 - **20 Hz is the maximum on `3 6` too**, the same as `7 0`. The manual's "under specific log requests" (Table 4-61) doesn't limit the target log set.
 - **UNIHEADINGB keeps pace:** 1177 frames against 1177 BESTNAVB frames in the same 60 s, for about 5 % more receiver CPU. Without ANT2 these were empty heading solutions, so the cost with a real heading is still open.
 - **The 1 s gap appears here as well:** one missing second in about half the runs, independent of the log set and the signal group. The cause isn't known (open question above).
+
+## Bench results (2026-11-12, UM980 on SG 2: navigation rate)
+UM980 module, R4.10Build25621, on miniPi over its USB-C port (COM3, `/dev/ttyUSB0`, 115200), antenna on the sky. Before the test its configuration was saved in [docs/receiver-configs/um980-as-received-2026-11-12.md](../docs/receiver-configs/um980-as-received-2026-11-12.md): `SIGNALGROUP 2`, `MODE ROVER SURVEY`, all ports at 115200 and five NMEA logs on COM3. The script sent `UNLOG COM3` (not saved), ran each log set for 60 s, then sent `RESET`; the receiver came back with its saved config and logs. CRC errors: 0 in every row. Solution `SINGLE` throughout, no RTCM.
+
+| Logs on COM3 | Rate | Epoch spacing | Receiver CPU idle |
+|---|---|---|---|
+| `BESTNAVB 0.1` | 9.85 Hz | 100 ms, plus one 1 s gap | 87 % |
+| `BESTNAVB 0.05` | 19.7 Hz | 50 ms, plus one 1 s gap | 78 % |
+| `BESTNAVB 0.02` | refused: `Period 0.02 is not supported for this log message!` | — | — |
+| `BESTNAVB 0.05`, `STADOPB 1`, `HWSTATUSB 1` (target) | 20.0 Hz | 50 ms, all | 78 % |
+| the same plus `OBSVMB 1` | 19.7 Hz | 50 ms, plus one 1 s gap | 77 % |
+| `BESTNAVB 0.02`, `STADOPB 1`, `HWSTATUSB 1` | BESTNAVB refused; the other two ran | — | — |
+
+- **20 Hz is the maximum on SG 2**, and the target log set reaches it. SG 8, the only group documented for 50 Hz, wasn't tried.
+- **More headroom than the UM982:** about 78 % CPU idle at 20 Hz, against about 70 % on the UM982 (`3 6` and `7 0`).
+- **The 1 s gap appears on the UM980 too**, with the same pattern as on the UM982. Both receivers were read through the same miniPi and USB cable, so the cause could be on the host side or common to the Unicore firmware (ToDo in [TODO.md](../TODO.md)).
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
