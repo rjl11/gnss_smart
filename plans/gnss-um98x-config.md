@@ -96,7 +96,7 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - DC09, DC10 and DC18 (float, V): core supplies with normal ranges of 0.85–1.0 V, 0.95–1.1 V and 1.7–1.9 V.
   - Clockflag (1 = ClockDrift valid), ClockDrift (equivalent velocity, m/s), a reserved float.
   - hwFlag (UCHAR): bit 0 oscillator/crystal, bit 1 VCXO/TCXO, bit 2 26/20 MHz, bit 4 internal/external clock, bit 7 check status valid. Then a reserved UCHAR, PLL_LOCK (USHORT) and two reserved UINTs.
-- **Command acknowledgement:** the reply is `$command,<cmd>,response: OK*cs`. An error reply is `$command,<cmd>,response: PARSING FAILED GRAMMAR ERROR,<token>*cs`. Both were confirmed on a UM982 (bench results below); confirm them once on a UM980.
+- **Command acknowledgement:** the reply is `$command,<cmd>,response: OK*cs`. An error reply is `$command,<cmd>,response: PARSING FAILED GRAMMAR ERROR,<token>*cs`. Both were confirmed on a UM982 and on a UM980 (bench results below). The UM980 test found more error forms, all without `response: OK`, so the firmware's test (a `$command,` line that contains `response: OK` is OK, anything else is an error) covers them.
 - **Heading (dual-antenna products):**
   - Heading is on by default (§1.3). It is the angle clockwise from true north to the baseline from the master antenna (ANT1) to the slave antenna (ANT2).
   - **`CONFIG HEADING`** (§4.18): modes `FIXLENGTH` (default), `VARIABLELENGTH`, `STATIC`, `LOWDYNAMIC`, `TRACTOR`. `LENGTH <cm> <tol cm>` sets a fixed baseline; it isn't used here. `RELIABILITY 1..4` sets the heading reliability threshold; the default is 3.
@@ -276,7 +276,7 @@ Not done yet:
    - Drive test: log UNIHEADING, BESTNAV and the INS yaw. INS yaw tracks the GNSS heading; at standstill and when reversing, yaw holds (no 180° drag); after power-on, yaw is valid before the tractor moves. Replay the logs with `external/INSLIB/tools/replay.c`, with and without `m.yaw`, and compare.
    - Baseline gate: loosen ANT2 or shadow it. The gate rejects the epochs, the diagnostics count them, and INS yaw coasts on the gyro.
 9. **Open questions to settle on the bench:**
-   - The acknowledgement and error text on a UM980 (confirmed on a UM982).
+   - ~~The acknowledgement and error text on a UM980.~~ The same as on the UM982, plus more error forms (bench results 2026-11-12, UM980 replies).
    - That the UM980 module has the same port mapping as the UM982 module (USB-C = COM3, pins = COM1 and COM2).
    - ~~The UM980 module's firmware build.~~ It runs R4.10Build25621, the latest we have, so no flash is needed (2026-11-12).
    - At which baud the `CONFIG COM1` reply arrives.
@@ -460,6 +460,27 @@ Same UM980 (R4.10Build25621, SG 2) on miniPi over COM3 at 115200, antenna indoor
 - **Why the 60 s tests showed it in about half the runs:** their timing started right after the log commands, so the start-up pause fell inside the measurement whenever the first frame arrived after the input flush. The UM982 runs used the same script, so the same cause is very likely there; not re-checked on the UM982.
 - **For the firmware:** a 1 s gap right after provisioning or after `RESET` is expected. The "BESTNAVB at 20 Hz" checks (Verification 2 and 4) should start counting after the first two seconds of output. In steady state, a missing epoch is a real fault worth counting in the diagnostics.
 - **HWSTATUS field 1** read about 60 000 on a receiver that had been on for about an hour and rose by about 1.2 over 10 min. That fits °C × 1000 (about 60 °C), as the AiO README deduces. A cold-start reading and a thermometer comparison are still needed to confirm it.
+
+## Bench results (2026-11-12, UM980 replies)
+Same UM980 (R4.10Build25621) on miniPi over COM3 at 115200, with its five 1 Hz NMEA logs running. Only read-only commands and commands the receiver refused were sent; `UNILOGLIST` afterwards showed the logs unchanged. Every reply is one `$command,<cmd as sent>,…*cs` line:
+
+| Sent | Reply after `$command,<cmd>,` | Delay |
+|---|---|---|
+| `VERSIONA COM3` | `response: OK`, then the `#VERSIONA` log | 196 ms |
+| `versiona com3` | `response: OK`, then `#VERSIONA`: commands aren't case-sensitive, and the echo keeps the case as sent | 156 ms |
+| `VERSIONA COM3 ONCE` | `response: PARSING FAILED GRAMMAR ERROR,ONCE` | 157 ms |
+| `FOOBAR` | `response: PARSING FAILED NO MATCHING FUNC  FOOBAR` (two spaces, no comma) | 152 ms |
+| `BESTNAVB COM3 0.02` | `response: PARSING FAILED FIELD OUT OF RANGE,Period 0.02 is not supported for this log message!` | 149 ms |
+| `BESTNAVB COM9 1` | `response can't found device (null)`: no colon after `response` | 145 ms |
+| `CONFIG COM9 115200` | `response: PARSING FAILED MISSING FIELD,` | 143 ms |
+| `CONFIG COM3 123456` | `response: PARSING FAILED GRAMMAR ERROR,123456` (an unsupported baud is refused, and the port stays as it was) | 140 ms |
+| `UNLOG COM3 GPZZZ` | `response: PARSING FAILED GRAMMAR ERROR,GPZZZ` | 138 ms |
+| `CONFIG` | `response: OK`, then 19 `$CONFIG,…` lines | 134 ms |
+| `MODE` | `response: OK`, then `#MODE,…;MODE ROVER SURVEY,` | 133 ms |
+
+- **OK and GRAMMAR ERROR match the UM982.** The other forms are new; the firmware only needs to tell `response: OK` from anything else, and it does.
+- **The echo repeats the command as sent**, so the firmware could check that a reply belongs to the command it is waiting for. It doesn't check that yet. A late reply to an earlier command could be taken for the current one; with replies in about 150 ms and a 1 s wait, that is unlikely.
+- **Replies take 133–196 ms** at 115200 with NMEA running, well inside the firmware's 1 s wait. `SAVECONFIG` and the reply delay at 460800 on COM1 are still to be measured.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
