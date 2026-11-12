@@ -1,0 +1,86 @@
+# UM980 module: configuration as received (2026-11-12)
+
+Read on miniPi over the module's USB-C port (COM3, CH340, `/dev/ttyUSB0`) at 115200, with the antenna on the sky. Only read-only queries were sent (`VERSION`, `MODE`, `CONFIG`, `UNILOGLIST`), and nothing was changed or saved. Every line's checksum was checked. The live NMEA output contains the position, so it isn't recorded here.
+
+## Identity (`VERSION`)
+```
+#VERSION,97,GPS,FINE,2444,417670000,25621,0,18,576;UM980,R4.10Build25621,HRPT00-S10C-P,2310415000001-MD22A1241405594,ff3b628f74e6d94e,2026/06/24*cbfe2d72
+```
+- Product `UM980`, firmware **R4.10Build25621** (2026-06-24). That's the latest UM980 build in `docs/firmware/unicore/`, so no flash is needed (see "Receiver firmware builds" in [plans/gnss-um98x-config.md](../../plans/gnss-um98x-config.md)).
+
+## Mode (`MODE`)
+```
+#MODE,97,GPS,FINE,2444,417690000,25621,0,18,975;MODE ROVER SURVEY,*1F
+```
+
+## Settings (`CONFIG`)
+```
+$CONFIG,ANTENNA,CONFIG ANTENNA POWERON*7A
+$CONFIG,NMEAVERSION,CONFIG NMEAVERSION V410*47
+$CONFIG,VELSTDTHD,CONFIG VELSTDTHD DISABLE 0 0*70
+$CONFIG,RTK,CONFIG RTK TIMEOUT 60*59
+$CONFIG,RTK,CONFIG RTK RELIABILITY 3 1*76
+$CONFIG,PPP,CONFIG PPP TIMEOUT 120*6C
+$CONFIG,DGPS,CONFIG DGPS TIMEOUT 300*6C
+$CONFIG,RTCMB1CB2A,CONFIG RTCMB1CB2A ENABLE*25
+$CONFIG,ANTENNADELTAHEN,CONFIG ANTENNADELTAHEN 0.0000 0.0000 0.0000*3A
+$CONFIG,SBAS,CONFIG SBAS DISABLE*70
+$CONFIG,PPS,CONFIG PPS ENABLE GPS POSITIVE 500000 1000 0 0*6E
+$CONFIG,SIGNALGROUP,CONFIG SIGNALGROUP 2*16
+$CONFIG,ANTIJAM,CONFIG ANTIJAM AUTO*2B
+$CONFIG,AGNSS,CONFIG AGNSS DISABLE*70
+$CONFIG,LOGSEQ,CONFIG LOGSEQ 1*15
+$CONFIG,CMDFORMAT,CONFIG CMDFORMAT 0*14
+$CONFIG,COM1,CONFIG COM1 115200*23
+$CONFIG,COM2,CONFIG COM2 115200*23
+$CONFIG,COM3,CONFIG COM3 115200*23
+```
+
+## Active logs (`UNILOGLIST`)
+```
+GPGGA COM3 1
+GPGSA COM3 1
+GPGST COM3 1
+GNGSV COM3 1
+GPRMC COM3 1
+```
+
+## Restoring this configuration
+Send these over COM3 at 115200, one at a time, and wait for `response: OK` after each. `CONFIG SIGNALGROUP` goes first because it reboots the receiver if the value changes. The UM980 takes one parameter only.
+
+```
+FRESET
+```
+Wait about 15 s for the reboot (all ports come back at 115200), then:
+```
+CONFIG SIGNALGROUP 2
+```
+Wait about 15 s in case it reboots, then:
+```
+CONFIG ANTENNA POWERON
+CONFIG NMEAVERSION V410
+CONFIG VELSTDTHD DISABLE 0 0
+CONFIG RTK TIMEOUT 60
+CONFIG RTK RELIABILITY 3 1
+CONFIG PPP TIMEOUT 120
+CONFIG DGPS TIMEOUT 300
+CONFIG RTCMB1CB2A ENABLE
+CONFIG ANTENNADELTAHEN 0.0000 0.0000 0.0000
+CONFIG SBAS DISABLE
+CONFIG PPS ENABLE GPS POSITIVE 500000 1000 0 0
+CONFIG ANTIJAM AUTO
+CONFIG AGNSS DISABLE
+CONFIG LOGSEQ 1
+CONFIG CMDFORMAT 0
+MODE ROVER SURVEY
+UNLOG COM3
+GPGGA COM3 1
+GPGSA COM3 1
+GPGST COM3 1
+GNGSV COM3 1
+GPRMC COM3 1
+SAVECONFIG
+```
+- The ports are already at 115200 after `FRESET`, so the `CONFIG COMx 115200` lines aren't needed.
+- Some items may be defaults that `FRESET` already sets. Sending them again does no harm. If one is refused, note it and go on.
+- Check the result: `CONFIG`, `MODE` and `UNILOGLIST` should match the listings above.
