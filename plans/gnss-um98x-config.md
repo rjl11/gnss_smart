@@ -12,7 +12,7 @@ A UM982 with both antennas outputs the heading of the ANT1 → ANT2 baseline. Th
 
 Decisions fixed by the user:
 - **Antenna mode is a setting**, `single` or `dual`. It has a compile-time default, and the web config page can override it. A build whose default is single (UM980) can be switched to a UM982 with dual antennas. A change takes effect after a reboot. See "Antenna mode" below.
-- **A UM982 with the slave antenna disabled is treated as a UM980**: the same logs and course-over-ground yaw, only with the UM982's lower maximum output rate. Its signal group in single mode is `CONFIG SIGNALGROUP 2 0`.
+- **A UM982 with the slave antenna disabled is treated as a UM980**: the same logs and course-over-ground yaw, only with the UM982's lower maximum output rate. Its signal group in single mode was meant to be `CONFIG SIGNALGROUP 2 0`, but the UM982 refuses it (bench results 2026-11-12). The target table's fallback applies: keep `3 6`, so the slave antenna still tracks, and leave the heading unused.
 - The sequence starts with `FRESET`, then a 15 s wait for the reboot, then `CONFIG SIGNALGROUP` (all constellations), then a wait for that reboot, and it ends with `SAVECONFIG`.
 - COM1, COM2 and COM3 all run at **460800**.
 - **No port is ever locked** (`CONFIG RXTYPE` is never sent), because of the risk of bricking the receiver.
@@ -73,7 +73,8 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - The first parameter is the master antenna's group, the second the slave's. **`0` disables the slave antenna** (Table 4-60). On a dual-antenna product an omitted second parameter is set to 0. A single-antenna product rejects a second parameter with an error.
   - UM980 SG 2 covers GPS L1C/A L1C L2C L2P L5, BDS B1I B3I B1C B2a B2b, GLO G1 G2 G3, GAL E1 E5a E5b E6, QZSS L1C/A L1C L2C L5 L1S, NavIC L5 and SBAS.
   - On the UM980 only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`), but check on the bench that SG 2 really delivers it.
-  - Table 4-61 lists only `4 5` (default) and `3 6` for the UM982. With **SG 3 6**, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests". `2 0`, the user's choice for UM982 single mode, isn't in the table, so whether the UM982 accepts it is a bench question.
+  - Table 4-61 lists only `4 5` (default) and `3 6` for the UM982. With **SG 3 6**, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests". `2 0`, the user's choice for UM982 single mode, isn't in the table, and the UM982 refuses it. Build 18975 accepts exactly `3 6`, `4 5`, `5 0` and `7 0` (bench results 2026-11-12).
+  - The manual says an omitted second parameter becomes 0 on a dual-antenna product. On the UM982 that holds only for `5` and `7`, where `x 0` is valid anyway. Every other master-only form gets a grammar error, `4` included. Always send both parameters.
 - **RTCM on the command port:**
   - In rover mode the receiver identifies RTCM input by itself (§3.1).
   - The default port type is `RXTYPE AUTO` (§4.3), so COM1 accepts commands and RTCM together.
@@ -105,7 +106,7 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
 ## Target configuration
 | Item | UM980 single | UM982 single | UM982 dual | Why |
 |---|---|---|---|---|
-| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 2 0` | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979 (as the module ships), else `4 5` | All constellations and frequencies. Slave off in UM982 single. If the UM982 refuses `2 0`, keep `3 6` and leave the heading unused (no `CONFIG HEADING`, no UNIHEADINGB). Confirm 20 Hz on the bench |
+| Signals | `CONFIG SIGNALGROUP 2` | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979, else `4 5` (same as dual) | `CONFIG SIGNALGROUP 3 6` on build ≥ 10979 (as the module ships), else `4 5` | All constellations and frequencies. The UM982 refuses `2 0` (bench results 2026-11-12), so UM982 single keeps the dual group and leaves the heading unused (no `CONFIG HEADING`, no UNIHEADINGB). `5 0` and `7 0` are accepted and turn the slave off, but their signal sets and rates aren't checked. Confirm 20 Hz on the bench |
 | Heading mode | — | not sent | `CONFIG HEADING VARIABLELENGTH` | See "VARIABLELENGTH and the mount" |
 | Heading reliability, offset | — | — | not sent (default 3, offset 0) | The firmware applies `baseline_yaw_b` itself |
 | Rover mode | `MODE ROVER SURVEY` | same | same | The manual's mode for precision agriculture and survey. Set explicitly so a different firmware default doesn't matter |
@@ -238,7 +239,7 @@ Not done yet:
 3. **Change one setting by hand** (e.g. `CONFIG COM1 115200` + `SAVECONFIG`). On the next boot it is detected and re-provisioned.
 4. **`CONFIG` and `UNILOGLIST`:**
    - UM980 single: SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE; three logs.
-   - UM982 single: SIGNALGROUP 2 0 accepted and shown; no UNIHEADINGB; three logs; BESTNAVB at 20 Hz.
+   - UM982 single: SIGNALGROUP 3 6 (4 5 below build 10979); no UNIHEADINGB; three logs; BESTNAVB at 20 Hz.
    - UM982 dual: SIGNALGROUP 3 6 (4 5 below build 10979), HEADING VARIABLELENGTH; four logs.
    - Two more logs each with the Zero 2 W companion (`GPRMC` and `GPZDA` on COM2).
 5. **Mode switching:**
@@ -260,7 +261,8 @@ Not done yet:
    - That the UM980 module has the same port mapping as the UM982 module (USB-C = COM3, pins = COM1 and COM2).
    - At which baud the `CONFIG COM1` reply arrives.
    - Whether UM980 SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
-   - Whether the UM982 accepts `SIGNALGROUP 2 0`, and what rate BESTNAVB reaches with it. If refused, use the fallback in the target table.
+   - ~~Whether the UM982 accepts `SIGNALGROUP 2 0`.~~ It doesn't (bench results 2026-11-12), so the target table's fallback is used.
+   - Whether `5 0` or `7 0` would serve UM982 single mode better than `3 6` (which signals they track, and the BESTNAVB rate).
    - Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together. If not, try SG 4 5 and record what changes.
    - Whether a factory-new receiver is already at the target signal group. If so, there is no reboot after `CONFIG SIGNALGROUP`.
    - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). If `CONFIG` only lists non-default items, the fast-path text match must allow for that.
@@ -295,6 +297,25 @@ The module was connected to a PC through its USB-C port (CH340 USB-serial bridge
   - A new module fails the fast-path check (mode, PPS, logs) and gets provisioned on first boot, as intended. In single mode the signal group differs too.
   - `PSRVELDRPOS` doesn't appear in the `CONFIG` reply (open question above).
   - The module ships at 460800 on every port, so detection finds it on the first baud tried.
+
+## Bench results (2026-11-12, UM982 signal-group sweep)
+Same module, build 18975, on COM10 through the USB-C port (COM3). At the start it was at `SIGNALGROUP 4 5` with all ports at 115200, not the shipped `3 6` and 460800, so it had been changed since 2026-11-06. Every form of `CONFIG SIGNALGROUP` was sent: master only 0–11, and every pair 0–11 × 0–11 (156 commands). After each OK the script waited for the reboot, probed with `VERSION` and read `CONFIG`. At the end `4 5` was restored. No antenna had a sky view, so rate and tracking weren't checked.
+
+| Command | Reply | `CONFIG` shows | Back (s after OK) |
+|---|---|---|---|
+| `3 6` | OK | `3 6` | ~10 |
+| `4 5` | OK | `4 5` | ~10 |
+| `5 0` | OK | `5 0` | ~10 |
+| `7 0` | OK | `7 0` | ~9 |
+| `5` | OK | `5 0` | ~10 |
+| `7` | OK | `7 0` | ~9 |
+| all other 150 | `PARSING FAILED GRAMMAR ERROR,` | unchanged | — |
+
+- **`2 0` and `2` are refused.** UM982 single mode uses the target table's fallback.
+- **Groups 5 and 7 are accepted on the UM982**, although Table 4-61 lists them only for other products. Both turn the slave antenna off.
+- **The second parameter is required**, except for `5` and `7`.
+- **The reboot takes about 10 s** from the OK until `VERSION` answers again: a 3 s pause, then 6–7 s of probing. The 15 s wait in the boot sequence is enough.
+- Script: a Python/pyserial loop over the commands. It sends each one, waits up to 3 s for the `$command` reply, and after an OK probes `VERSION` once a second (60 s limit) before reading `CONFIG`.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
