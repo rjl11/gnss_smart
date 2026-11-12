@@ -33,6 +33,11 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 - **`VERSIONB`** (msg ID 37) gives the product type (18 = UM980), firmware build and serial number (§7.5.2). `MODE ROVER SURVEY` needs UM980 build ≥ 7923 (§3.4).
 - **`SAVECONFIG`** saves the logs (except ONCE logs) and the port settings (§8.3).
 - **Doppler position prediction** is on by default (§4.34). When pseudoranges are poor, the receiver then reports a predicted position as a fix with 0 satellites. For INSLIB that is a fake measurement, so turn it off.
+- **`HWSTATUS`** (msg ID 218, §7.5.44, Tables 7-101 and 7-102) is the hardware status log. It is listed for the UM980, UM982 and UM981, among others, and supports **1 Hz output only**. The fields after the header are:
+  - Field 2: an Int marked **"Reserved"**. Other firmware reads it as the chip temperature in thousandths of a °C (see "Reference: reading the receiver temperature" below), but the manual doesn't say so. The manual's own example has 66807 there.
+  - DC09, DC10 and DC18 (float, V): core supplies with normal ranges of 0.85–1.0 V, 0.95–1.1 V and 1.7–1.9 V.
+  - Clockflag (1 = ClockDrift valid), ClockDrift (equivalent velocity, m/s), a reserved float.
+  - hwFlag (UCHAR): bit 0 oscillator/crystal, bit 1 VCXO/TCXO, bit 2 26/20 MHz, bit 4 internal/external clock, bit 7 check status valid. Then a reserved UCHAR, PLL_LOCK (USHORT) and two reserved UINTs.
 - **Command acknowledgement:** the reply is `$command,<cmd>,response: OK*cs`. An error reply is `$command,<cmd>,response: PARSING FAILED GRAMMAR ERROR,<token>*cs`. Both were confirmed on a UM982 (same N4 firmware family, [gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)); confirm them once on a UM980.
 
 ## Target configuration
@@ -44,13 +49,18 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 | PPS | `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0` | 1 Hz, rising edge, 100 ms wide. `ENABLE` outputs PPS only once time has converged, so there are no edges before time is valid (§4.32) |
 | Port locks | none: `CONFIG RXTYPE` is never sent | Risk of bricking. All ports stay at the default AUTO |
 | Baud | `CONFIG COM2 460800`, `CONFIG COM3 460800`, `CONFIG COM1 460800` | COM1 is the Pico's port, so it goes last. A PC on the USB-C (COM3) or on the COM2 pins finds the receiver at a known rate |
-| Logs | `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, then `BESTNAVB COM1 0.05`, `STADOPB COM1 1` | See below |
+| Logs | `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, then `BESTNAVB COM1 0.05`, `STADOPB COM1 1`, `HWSTATUSB COM1 1` | See below |
 
 Logs:
 - **BESTNAVB at 20 Hz** (§7.5.21) is the INSLIB input: position, velocity, per-axis σ, differential age, satellite counts and solution type.
 - **STADOPB at 1 Hz** (§7.5.96) gives the HDOP for GGA.
+- **HWSTATUSB at 1 Hz** (§7.5.44) is for diagnostics only; nothing from it goes to INSLIB. It gives the receiver temperature (unconfirmed field), the three core supply voltages, the clock-drift flag and PLL_LOCK.
+  - **Parser rule:** read field 2 as a signed integer in thousandths of a °C. Accept −40 000 to 125 000 (−40 to 125 °C); outside that, report "not reported". Until the bench check below confirms the field, the diagnostics page labels it "temperature (unconfirmed)".
+  - Flag DC09, DC10 or DC18 outside the manual's normal range on the diagnostics page.
+  - No thermal warning threshold yet. Set one from field data.
+  - **Why a saved 1 Hz log and not a poll:** the AiO v4.5 firmware sends a one-shot `HWSTATUSA` every 10 s instead (see the reference section below). A saved log uses the binary parser that already exists, comes back after `RESET`, and puts no command-queue traffic between RTCM frames.
 - **UTC for NMEA** comes from the leap-second field in the binary header (§7.5.1).
-- **Bandwidth:** BESTNAVB is about 24 + 128 + 4 B, so at 20 Hz about 3.1 kB/s. That is under 7 % of 460800.
+- **Bandwidth:** BESTNAVB is about 24 + 128 + 4 B, so at 20 Hz about 3.1 kB/s. That is under 7 % of 460800. HWSTATUSB adds about 24 + 44 + 4 B per second.
 - **Height:** BESTNAV reports height above MSL plus the undulation. INSLIB wants ellipsoidal height = hgt + undulation; convert in the parser.
 
 ## Boot state machine (core 0, module `gnss_um980_cfg`)
@@ -69,7 +79,7 @@ Logs:
    3. `CONFIG SIGNALGROUP 2` and wait for the OK. Wait **15 s**, then probe until the receiver answers; this works whether or not it rebooted. Send `CONFIG` and check that it shows `SIGNALGROUP 2`.
    4. `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS DISABLE`, `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0`. Wait for each OK.
    5. `CONFIG COM2 460800`, `CONFIG COM3 460800`, and `CONFIG COM1 460800` last. The COM1 reply is expected at the old baud (verify on the bench). After it, switch UART1 to 460800, wait 100 ms and probe with `VERSIONB`.
-   6. `BESTNAVB COM1 0.05`, `STADOPB COM1 1`.
+   6. `BESTNAVB COM1 0.05`, `STADOPB COM1 1`, `HWSTATUSB COM1 1`.
    7. `SAVECONFIG` and wait for the OK.
    8. **Prove that it was saved:**
       - Send `RESET` and wait 15 s.
@@ -105,7 +115,7 @@ Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)
 1. A factory-new UM980 (or one reset with `FRESET` from UPrecise) is provisioned with no user action. The log shows every step OK and the total time (40–60 s, estimate, not yet measured).
 2. Power-cycle: the fast path passes, no `FRESET` is sent, and BESTNAVB arrives at 20 Hz.
 3. Change one setting by hand (e.g. `CONFIG COM1 115200` + `SAVECONFIG`). On the next boot it is detected and re-provisioned.
-4. `CONFIG` shows SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE. `UNILOGLIST` shows only the two logs (four with the Zero 2 W companion: plus `GPRMC` and `GPZDA` on COM2).
+4. `CONFIG` shows SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE. `UNILOGLIST` shows only the three logs (five with the Zero 2 W companion: plus `GPRMC` and `GPZDA` on COM2).
 5. RTCM from SW Maps flows into COM1 while BESTNAVB streams:
    - The receiver reaches RTK fixed.
    - BESTNAVB stays at 20 Hz with no CRC errors.
@@ -118,6 +128,7 @@ Core split: everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)
    - Whether SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
    - Whether a factory-new UM980 is already at SG 2. If so, there is no reboot after `CONFIG SIGNALGROUP 2`.
    - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md), "Comparison"), and that the parser rejects them.
+   - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
@@ -157,3 +168,11 @@ The AiO v4.5 autosteer firmware at https://github.com/renatorgr/Boards (`Firmwar
 - **Its timeouts:** it waits 5 s for valid data at 460800, and 15 s for a silent receiver, before it searches the baud rate. That is a field figure to set beside our 10 s start value for core 1's wait for the receiver model.
 - **A leading CR LF:** the V4.1 firmware it derives from (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/zGnss.ino`, commit `f57c395`, read 2026-11-10) sends every command as CR LF, the command, CR LF. The first CR LF ends whatever partial line or frame the receiver already holds. Our arbiter never interleaves, but the same prefix costs two bytes and protects the first command after boot or after dropped bytes; worth adding to the command helper.
 - **Differences:** it never sends `FRESET` on its own (its console asks before `FRESET`, `UNLOG` and baud changes), and a receiver found at another baud stays there until the settings are loaded. Our sequence starts with `FRESET` by the user's decision.
+
+## Reference: reading the receiver temperature
+The same AiO v4.5 firmware (https://github.com/renatorgr/Boards, `Firmware/v4.5_AiO_WEB/zReceiver.ino`, `zReceiver.h`, `zHandlers.ino` and the README, read 2026-11-12, GPL v3) shows a UM982's temperature on its status page. These are facts from its code and README, to confirm on our modules; no code is taken.
+- **Command:** a one-shot `HWSTATUSA` every 10 s (`RX_TEMP_MS`). It is sent only when the port is otherwise quiet: data arrived in the last 2 s, no settings read or write is running, no console reply is pending and the TX queue is empty. Polling stops after 3 polls with no answer (`RX_TEMP_TRIES`). The `$command,HWSTATUSA,response: OK` reply is kept off its console.
+- **Parsing:** it checks the line's CRC-32 and drops a damaged line. It reads the first field after `;` as thousandths of a °C and rounds it to whole degrees. A value outside −40 000 to 125 000 counts as "not reported". The page shows the reading as current for 30 s.
+- **Example** from its README, a UM982 on R4.10Build13495 on the bench (2026-11-10): `#HWSTATUSA,71,GPS,FINE,2444,241114900,0,0,18,13;59493,0.914,1.025,1.805,1,-0.822,0.0,0x84,1,0x0377,0,0*6e81c92f`. It reads that as 59 °C. The three supplies (0.914, 1.025, 1.805 V) are inside the manual's normal ranges.
+- **Not confirmed:** the README says the temperature mapping is deduced, because the manual marks the field "Reserved". It proposes a cold-start against warm-start comparison and records no result. So this is their deduction, not a measured fact. Our bench check is in Verification 7.
+- It sets no warning threshold for the receiver temperature and parses none of the other HWSTATUS fields.

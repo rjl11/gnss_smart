@@ -49,7 +49,7 @@ Related:
   - Heading accuracy is **0.1° RMS for a 1 m baseline**. It scales roughly with 1/baseline, so a 2 m bar gives about 0.05° (estimate, not yet measured).
   - RTK accuracy is the same as the UM980: 0.8 cm + 1 ppm H, 1.5 cm + 1 ppm V.
   - Unlike the UM980, the UM982 has no 50 Hz option. This project only uses 20 Hz.
-- **Everything else in the UM980 plan holds for the UM982:** `FRESET`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS`, `CONFIG PPS`, `CONFIG COMx`, `BESTNAVB`, `STADOPB`, `UNILOGLIST`, `SAVECONFIG` and `RXTYPE AUTO`. `BESTNAV` refers to the master antenna (ANT1); the slave antenna's position is in a separate log, `BESTNAVH` (§7.5.20).
+- **Everything else in the UM980 plan holds for the UM982:** `FRESET`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS`, `CONFIG PPS`, `CONFIG COMx`, `BESTNAVB`, `STADOPB`, `HWSTATUSB` (hardware status and the unconfirmed temperature field, see [gnss-um980-config.md](gnss-um980-config.md), "Reference: reading the receiver temperature"), `UNILOGLIST`, `SAVECONFIG` and `RXTYPE AUTO`. `BESTNAV` refers to the master antenna (ANT1); the slave antenna's position is in a separate log, `BESTNAVH` (§7.5.20).
 
 ## Hardware
 - **Antennas:** ANT1 (master) and ANT2 (slave), both roof-mounted with a clear sky view.
@@ -80,10 +80,10 @@ The state machine in [gnss-um980-config.md](gnss-um980-config.md) stays as it is
 | Heading mode | — | `CONFIG HEADING VARIABLELENGTH` |
 | Heading reliability | — | default (3), not sent |
 | Heading offset | — | not sent (stays 0). The firmware applies `baseline_yaw_b` itself |
-| Logs | `BESTNAVB COM1 0.05`, `STADOPB COM1 1` | the same, plus `UNIHEADINGB COM1 0.05` |
+| Logs | `BESTNAVB COM1 0.05`, `STADOPB COM1 1`, `HWSTATUSB COM1 1` | the same, plus `UNIHEADINGB COM1 0.05` |
 | Everything else | as in the UM980 plan | same |
 
-3. **Fast-path check:** on a UM982, the `CONFIG` reply must also contain the HEADING VARIABLELENGTH line, and `UNILOGLIST` must show three logs (five with the Zero 2 W companion).
+3. **Fast-path check:** on a UM982, the `CONFIG` reply must also contain the HEADING VARIABLELENGTH line, and `UNILOGLIST` must show four logs (six with the Zero 2 W companion).
 4. **Provision:** the same steps, with the UM982 rows. `CONFIG HEADING VARIABLELENGTH` goes with the step 4 settings (after the signal-group reboot, before `SAVECONFIG`). `UNIHEADINGB` goes with the logs in step 6.
 5. **Bandwidth:** UNIHEADINGB is about 24 + 44 + 4 B. At 20 Hz that is about 1.4 kB/s, so COM1 TX carries about 4.5 kB/s in total, about 10 % of 460800.
 6. **Where the offset is stored:** `baseline_yaw_b` is an install setting, stored in Pico flash and editable on the web config page ([web-config-server.md](web-config-server.md)). It is not stored in the receiver, so swapping a receiver doesn't lose it.
@@ -147,6 +147,7 @@ Points to take from it:
 - **`CONFIG RTK TIMEOUT`** decides how long the receiver keeps an RTK solution after corrections stop. AgOpenGPS raises it to 600 s; the module ships with 60 s. INSLIB bridges outages itself, so the short default suits us, but it should be a deliberate entry in the target table once tested.
 - **`CONFIG MMP ENABLE`** (multipath mitigation) is worth a bench comparison near the cab roof.
 - **A quirk seen in the field:** a UM982 GGA can arrive with `00` satellites and HDOP `9999.0`, and that firmware holds the last good values for up to 2 s. Watch for the same epochs in BESTNAVB and STADOPB; our gating on solution status should already reject them.
+- **Receiver temperature:** that firmware polls `HWSTATUSA` every 10 s and reads the first field after `;` as thousandths of a °C. On a UM982 with R4.10Build13495 it read 59493, which it shows as 59 °C. The manual marks the field "Reserved", and the firmware's README says the mapping is deduced, not confirmed. Our module runs R4.10Build18975 and hasn't been checked. The details and our parser rule are in [gnss-um980-config.md](gnss-um980-config.md) ("Reference: reading the receiver temperature" and the HWSTATUSB bullet under "Logs").
 
 ## Bench results (2026-11-06, UM982 module on a PC over USB-C)
 The module was connected to a PC through its USB-C port (CH340 USB-serial bridge, Windows COM10). Only read-only queries and one-shot logs were sent, and nothing was saved. The antennas weren't connected or had no sky view: BESTNAV and UNIHEADING reported `INSUFFICIENT_OBS`, so heading, rate and fix tests are still open.
@@ -179,7 +180,7 @@ The module was connected to a PC through its USB-C port (CH340 USB-serial bridge
 2. **Provisioning:**
    - A factory-new UM982 is provisioned with no user action.
    - `CONFIG` shows `SIGNALGROUP 3 6` (`4 5` on a build below 10979), `HEADING VARIABLELENGTH`, COM1/2/3 at 460800 and no RXTYPE lock.
-   - `UNILOGLIST` shows three logs.
+   - `UNILOGLIST` shows four logs.
    - After a power cycle, the fast path passes.
 3. **Rate:** BESTNAVB and UNIHEADINGB both arrive at 20 ± 1 Hz on SG 3 6 (build ≥ 10979). If not, try SG 4 5 and record what changes.
 4. **Static heading:** with antennas on a bar at a known azimuth (surveyed points or a known building edge), the heading matches within the receiver's σ, and `baseline_yaw_b` is checked.
@@ -198,3 +199,4 @@ The module was connected to a PC through its USB-C port (CH340 USB-serial bridge
    - The module's COM1 and PPS logic level (3.3 V expected).
    - Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together.
    - The module's time from power-on to the first `VERSIONB` reply, which sets core 1's wait for the receiver model (10 s start value).
+   - Whether HWSTATUS field 2 is the temperature on build 18975. This read-only check can be done now with the module on the PC: send `HWSTATUSA COM3` once, as in the 2026-11-06 bench queries, and check for a plausible value in thousandths of a °C. Then do the cold/warm comparison in [gnss-um980-config.md](gnss-um980-config.md) (Verification 7).

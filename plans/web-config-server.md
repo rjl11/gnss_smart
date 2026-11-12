@@ -26,7 +26,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 - Firmware version, build, uptime, reset reason.
 - Per-sensor: measured rate (IMU 800 Hz, baro 100 Hz, GNSS 20 Hz), packets received, checksum/framing errors, UART overruns, time since last sample.
 - GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset.
-- UM980 setup: provisioning state (detecting / checking / provisioning step N / running / error), last error, receiver serial number and firmware build ([gnss-um980-config.md](gnss-um980-config.md)).
+- UM980 setup: provisioning state (detecting / checking / provisioning step N / running / error), last error, receiver serial number and firmware build ([gnss-um980-config.md](gnss-um980-config.md)). From HWSTATUSB: the receiver temperature, labelled "unconfirmed" until the bench check, and the three core supply voltages, each flagged when it is outside its normal range.
 - TM210 setup: provisioning state, last error, node ID, and the QoS and temperature from the Status object ([imu-tm210-config.md](imu-tm210-config.md)).
 - GNSS heading (UM982 only): receiver model, heading solution status and position type, baseline length and its median, heading σ, gated epochs ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)).
 - Filter: `nav_suite` mode (NONE / ATTITUDE_ONLY / COASTING / FULL, [inslib-nav-suite.md](inslib-nav-suite.md)), position/velocity/attitude, key covariance terms, innovation stats, number of rejected updates.
