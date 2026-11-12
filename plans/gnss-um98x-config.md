@@ -129,6 +129,7 @@ What this means here:
 | Heading reliability, offset | — | — | not sent (default 3, offset 0) | The firmware applies `baseline_yaw_b` itself |
 | Rover mode | `MODE ROVER SURVEY` | same | same | The manual's mode for precision agriculture and survey. Set explicitly so a different firmware default doesn't matter |
 | Doppler prediction | `CONFIG PSRVELDRPOS DISABLE` | same | same | No fake fixes into INSLIB, which does its own prediction |
+| PVT engine | `CONFIG PVTALG MULTI` | same | same | Dual-frequency standalone solution (§4.35, Table 4-45). The default is MULTI on the UM980 but SINGLE on the UM982, so it is set on both. `CONFIG` lists `PVTALG MULTI` once it is set; with the default, no line appears (seen on the UM980, 2026-11-12) |
 | PPS | `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0` | same | same | 1 Hz, rising edge, 100 ms wide. `ENABLE` outputs PPS only once time has converged, so there are no edges before time is valid (§4.32) |
 | Port locks | none: `CONFIG RXTYPE` is never sent | same | same | Risk of bricking. All ports stay at the default AUTO |
 | Baud | `CONFIG COM2 460800`, `CONFIG COM3 460800`, `CONFIG COM1 460800` | same | same | COM1 is the Pico's port, so it goes last. A PC on the USB-C (COM3) or on the COM2 pins finds the receiver at a known rate |
@@ -165,7 +166,7 @@ Logs:
    1. `UNLOG` (quiets the current port), then `FRESET`. Switch UART1 to 115200.
    2. Wait **15 s**. Then send `VERSIONB` every 1 s until the receiver answers (error after 60 s).
    3. `CONFIG SIGNALGROUP` with the mode's value, and wait for the OK. Wait **15 s**, then probe until the receiver answers; this works whether or not it rebooted. Send `CONFIG` and check that it shows the new signal group.
-   4. `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS DISABLE`, `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0`, and in UM982 dual `CONFIG HEADING VARIABLELENGTH`. Wait for each OK.
+   4. `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, `MODE ROVER SURVEY`, `CONFIG PSRVELDRPOS DISABLE`, `CONFIG PVTALG MULTI`, `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0`, and in UM982 dual `CONFIG HEADING VARIABLELENGTH`. Wait for each OK.
    5. `CONFIG COM2 460800`, `CONFIG COM3 460800`, and `CONFIG COM1 460800` last. The COM1 reply is expected at the old baud (verify on the bench). After it, switch UART1 to 460800, wait 100 ms and probe with `VERSIONB`.
    6. `BESTNAVB COM1 0.05`, `STADOPB COM1 1`, `HWSTATUSB COM1 1`, and in UM982 dual `UNIHEADINGB COM1 0.05`.
    7. `SAVECONFIG` and wait for the OK.
@@ -242,7 +243,7 @@ Everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)): detection
 ## Firmware status
 Done in the first demo (`firmware/`, built, not yet run on hardware):
 - `APP_GNSS_ANTENNA_MODE` in `firmware/app/app_config.h`, set from CMake with `-DGNSS_ANTENNA_MODE=single|dual` (default single).
-- `firmware/drivers/um980/um980_cfg.c`: Identify accepts both receivers and picks the effective mode, the signal-group command and the target items; provisioning and the fast-path check follow the mode (`HEADING VARIABLELENGTH` and UNIHEADINGB only in dual). UM982 single uses the dual group (`3 6`, or `4 5` below build 10979), as in the target table.
+- `firmware/drivers/um980/um980_cfg.c`: Identify accepts both receivers and picks the effective mode, the signal-group command and the target items; provisioning and the fast-path check follow the mode (`HEADING VARIABLELENGTH` and UNIHEADINGB only in dual). UM982 single uses the dual group (`3 6`, or `4 5` below build 10979), as in the target table. `CONFIG PVTALG MULTI` is sent on both receivers and is required in the fast-path check.
 - `firmware/drivers/um980/um980.c` decodes UNIHEADINGB; `firmware/app/main.c` applies the fixed-type check, the baseline-length median gate, `baseline_yaw_b` (`APP_BASELINE_YAW_DEG`) and the σ floor, and sends the heading to core 1 as its own queue item with its own time of validity and delay. Core 1 fills `m.yaw` from it.
 - `firmware/app/nav_core1.c` starts the filter at once from the setting and re-initialises only in the mismatch case. `APP_MODEL_WAIT_MS` is gone.
 
@@ -256,9 +257,9 @@ Not done yet:
 2. **Power-cycle:** the fast path passes, no `FRESET` is sent, and BESTNAVB arrives at 20 Hz (UNIHEADINGB too in dual).
 3. **Change one setting by hand** (e.g. `CONFIG COM1 115200` + `SAVECONFIG`). On the next boot it is detected and re-provisioned.
 4. **`CONFIG` and `UNILOGLIST`:**
-   - UM980 single: SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line and PSRVELDRPOS DISABLE; three logs.
-   - UM982 single: SIGNALGROUP 3 6 (4 5 below build 10979); no UNIHEADINGB; three logs; BESTNAVB at 20 Hz.
-   - UM982 dual: SIGNALGROUP 3 6 (4 5 below build 10979), HEADING VARIABLELENGTH; four logs.
+   - UM980 single: SIGNALGROUP 2, COM1/2/3 at 460800, no RXTYPE lock, the PPS line, PSRVELDRPOS DISABLE and PVTALG MULTI; three logs.
+   - UM982 single: SIGNALGROUP 3 6 (4 5 below build 10979), PVTALG MULTI; no UNIHEADINGB; three logs; BESTNAVB at 20 Hz.
+   - UM982 dual: SIGNALGROUP 3 6 (4 5 below build 10979), PVTALG MULTI, HEADING VARIABLELENGTH; four logs.
    - Two more logs each with the Zero 2 W companion (`GPRMC` and `GPZDA` on COM2).
 5. **Mode switching:**
    - A build with default single, UM980 fitted: single mode, `automotive_mode` true.
@@ -287,6 +288,7 @@ Not done yet:
    - ~~Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together.~~ It does without a slave antenna (bench results 2026-11-12, `3 6` rate test). Repeat with ANT2 connected and a real heading solution.
    - What causes the occasional 1 s gap in BESTNAVB (one missing second about once a minute, on `3 6` and `7 0`, with any log set). Log 10 min and look for a pattern (ToDo in [TODO.md](../TODO.md)).
    - Whether a factory-new receiver is already at the target signal group. If so, there is no reboot after `CONFIG SIGNALGROUP`.
+   - Whether the UM982 accepts `CONFIG PVTALG MULTI` and then lists it in `CONFIG`, as the UM980 does. The fast-path check requires the line, so a UM982 that doesn't list it would be re-provisioned on every boot (up to the two-attempt limit).
    - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). If `CONFIG` only lists non-default items, the fast-path text match must allow for that.
    - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ("Comparison: the AgOpenGPS UM982 settings"), and that the parser rejects them.
    - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value.

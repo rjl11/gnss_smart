@@ -41,6 +41,7 @@ enum {
     CFG_PPS,
     CFG_SIGNALGROUP,
     CFG_PSRVELDRPOS,
+    CFG_PVTALG,
     CFG_HEADING,
     CFG_COUNT
 };
@@ -50,13 +51,17 @@ static const char *const k_cfg_fixed[CFG_COUNT] = {
     [CFG_COM3] = "COM3 460800",
     [CFG_PPS] = "PPS ENABLE GPS POSITIVE 100000 1000 0 0",
     [CFG_PSRVELDRPOS] = "PSRVELDRPOS DISABLE",
+    [CFG_PVTALG] = "PVTALG MULTI",
     [CFG_HEADING] = "HEADING VARIABLELENGTH",
 };
 #define CFG_BIT(i)              (1u << (i))
 /* PSRVELDRPOS may not be listed by CONFIG (seen on a UM982), so its absence
- * is not a mismatch. The command is then sent again on entering RUN. */
+ * is not a mismatch. The command is then sent again on entering RUN.
+ * PVTALG is listed once it has been set (seen on a UM980, 2026-11-12), so it
+ * is required: a receiver still on its default (SINGLE on the UM982) gets
+ * provisioned. */
 #define CFG_REQUIRED_COMMON     (CFG_BIT(CFG_COM1) | CFG_BIT(CFG_COM2) | CFG_BIT(CFG_COM3) | \
-                                 CFG_BIT(CFG_PPS) | CFG_BIT(CFG_SIGNALGROUP))
+                                 CFG_BIT(CFG_PPS) | CFG_BIT(CFG_SIGNALGROUP) | CFG_BIT(CFG_PVTALG))
 
 /* The heading modes of CONFIG HEADING (manual §4.18). Other HEADING lines
  * (RELIABILITY, LENGTH, OFFSET) are not compared. */
@@ -105,6 +110,7 @@ static const script_step_t k_script[] = {
     { OP_CMD,      "UNLOG COM3",                                       5000, false },
     { OP_CMD,      "MODE ROVER SURVEY",                                5000, false },
     { OP_CMD,      "CONFIG PSRVELDRPOS DISABLE",                       5000, false },
+    { OP_CMD,      "CONFIG PVTALG MULTI",                              5000, false },
     { OP_CMD,      "CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0",   5000, false },
     { OP_CMD,      "CONFIG HEADING VARIABLELENGTH",                    5000, true  },
     /* 4. Baud rates, our own port last. Its reply may come at either rate. */
