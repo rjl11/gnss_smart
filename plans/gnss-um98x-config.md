@@ -35,7 +35,7 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 | Minimum build (`MODE ROVER`, §3.4) | 7923 | 7650 |
 | Antennas | 1 | 2: ANT1 (master), ANT2 (slave) |
 | Signal groups (§4.48) | 1, 2, 8, 10; one parameter only | two parameters (master, slave): `4 5` (default), `3 6`, `5 0`, `7 0`. Our build 18975 accepts exactly these (bench results 2026-11-12) |
-| Max output rate | 50 Hz on SG 8 only (UM980 HW Table 1-1: "supports 50 Hz in specific mode"); 20 Hz standard. On SG 2, `BESTNAVB COM3 0.05` gives 20 Hz and `0.02` is refused (bench results 2026-11-12) | 20 Hz RTK + heading (HW Table 1-1, product brief); no 50 Hz option. On `7 0`, `BESTNAVB COM3 0.02` is refused ("Period 0.02 is not supported for this log message") and `0.05` gives 20 Hz (bench results 2026-11-12) |
+| Max output rate | 50 Hz on SG 8 only (UM980 HW Table 1-1: "supports 50 Hz in specific mode"); 20 Hz standard. On SG 2, `BESTNAVB COM3 0.05` gives 20 Hz and `0.02` is refused; on SG 8, `0.02` gives 50 Hz (bench results 2026-11-12) | 20 Hz RTK + heading (HW Table 1-1, product brief); no 50 Hz option. On `7 0`, `BESTNAVB COM3 0.02` is refused ("Period 0.02 is not supported for this log message") and `0.05` gives 20 Hz (bench results 2026-11-12) |
 | GNSS heading | no | yes, on by default (§1.3) |
 | Cold start (TTFF) | < 12 s (UM980 HW Table 1-1) | < 30 s (product brief) |
 | Power (bare part, 3.3 V) | 145 mA typical, **180 mA maximum**, 480 mW (UM980 HW Table 2-3) | 180 mA typical, **300 mA maximum**, 600 mW (HW Table 2-4) |
@@ -76,7 +76,7 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - It reboots the receiver only if the value changes, and it saves itself without `SAVECONFIG`. That is why the manual says to send it before the other settings.
   - The first parameter is the master antenna's group, the second the slave's. **`0` disables the slave antenna** (Table 4-60). On a dual-antenna product an omitted second parameter is set to 0. A single-antenna product rejects a second parameter with an error.
   - UM980 SG 2 covers GPS L1C/A L1C L2C L2P L5, BDS B1I B3I B1C B2a B2b, GLO G1 G2 G3, GAL E1 E5a E5b E6, QZSS L1C/A L1C L2C L5 L1S, NavIC L5 and SBAS.
-  - On the UM980 only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`). SG 2 delivers it with the target logs (bench results 2026-11-12, UM980 rate test).
+  - On the UM980 only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`). SG 2 delivers it with the target logs, and SG 8 delivers 50 Hz but drops GLONASS (bench results 2026-11-12, UM980 rate tests).
   - Table 4-61 lists only `4 5` (default) and `3 6` in its UM982 row. R1.16 adds a UMD982 row with `4 5`, `3 6`, `5 0` and `7 0`, the same four values our UM982 accepts. With **SG 3 6**, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests". `2 0`, the user's choice for UM982 single mode, isn't in the table, and the UM982 refuses it. Build 18975 accepts exactly `3 6`, `4 5`, `5 0` and `7 0` (bench results 2026-11-12).
   - Table 4-60 doesn't match what build 18975 tracks on the master in two places (bench results 2026-11-12, sky test): group 7 tracks no Galileo E6, though the table lists it, and group 3 tracks BDS B1C, not B2a, as footnote 6 says for builds before 23575.
   - The manual says an omitted second parameter becomes 0 on a dual-antenna product. On the UM982 that holds only for `5` and `7`, where `x 0` is valid anyway. Every other master-only form gets a grammar error, `4` included. Always send both parameters.
@@ -412,7 +412,7 @@ Same setup (master antenna only, on the sky; slave antenna not connected). The s
 - **The 1 s gap appears here as well:** one missing second in about half the runs, independent of the log set and the signal group. The cause isn't known (open question above).
 
 ## Bench results (2026-11-12, UM980 on SG 2: navigation rate)
-UM980 module, R4.10Build25621, on miniPi over its USB-C port (COM3, `/dev/ttyUSB0`, 115200), antenna on the sky. Before the test its configuration was saved in [docs/receiver-configs/um980-as-received-2026-11-12.md](../docs/receiver-configs/um980-as-received-2026-11-12.md): `SIGNALGROUP 2`, `MODE ROVER SURVEY`, all ports at 115200 and five NMEA logs on COM3. The script sent `UNLOG COM3` (not saved), ran each log set for 60 s, then sent `RESET`; the receiver came back with its saved config and logs. CRC errors: 0 in every row. Solution `SINGLE` throughout, no RTCM.
+UM980 module, R4.10Build25621, on miniPi over its USB-C port (COM3, `/dev/ttyUSB0`, 115200), antenna indoors (the receiver still had a `SINGLE` fix in every epoch, so the rates hold). Before the test its configuration was saved in [docs/receiver-configs/um980-as-received-2026-11-12.md](../docs/receiver-configs/um980-as-received-2026-11-12.md): `SIGNALGROUP 2`, `MODE ROVER SURVEY`, all ports at 115200 and five NMEA logs on COM3. The script sent `UNLOG COM3` (not saved), ran each log set for 60 s, then sent `RESET`; the receiver came back with its saved config and logs. CRC errors: 0 in every row. Solution `SINGLE` throughout, no RTCM.
 
 | Logs on COM3 | Rate | Epoch spacing | Receiver CPU idle |
 |---|---|---|---|
@@ -423,9 +423,24 @@ UM980 module, R4.10Build25621, on miniPi over its USB-C port (COM3, `/dev/ttyUSB
 | the same plus `OBSVMB 1` | 19.7 Hz | 50 ms, plus one 1 s gap | 77 % |
 | `BESTNAVB 0.02`, `STADOPB 1`, `HWSTATUSB 1` | BESTNAVB refused; the other two ran | — | — |
 
-- **20 Hz is the maximum on SG 2**, and the target log set reaches it. SG 8, the only group documented for 50 Hz, wasn't tried.
+- **20 Hz is the maximum on SG 2**, and the target log set reaches it. For 50 Hz on SG 8, see the next section.
 - **More headroom than the UM982:** about 78 % CPU idle at 20 Hz, against about 70 % on the UM982 (`3 6` and `7 0`).
 - **The 1 s gap appears on the UM980 too**, with the same pattern as on the UM982. Both receivers were read through the same miniPi and USB cable, so the cause could be on the host side or common to the Unicore firmware (ToDo in [TODO.md](../TODO.md)).
+
+## Bench results (2026-11-12, UM980 on SG 8: 50 Hz)
+Same UM980 and setup (115200, antenna indoors). The script sent `CONFIG SIGNALGROUP 8` (it rebooted in about 10 s), `UNLOG COM3`, waited 150 s, recorded 60 s of `OBSVMB COM3 1`, then ran each log set for 60 s. At the end it sent `CONFIG SIGNALGROUP 2`; the receiver rebooted back to its saved state (SG 2, the five NMEA logs, `MODE ROVER SURVEY`). CRC errors: 0 in every row, so 115200 is enough for 50 Hz BESTNAVB. Solution `SINGLE` throughout, no RTCM.
+
+| Logs on COM3 | Rate | Epoch spacing | Receiver CPU idle |
+|---|---|---|---|
+| `BESTNAVB 0.05` | 20.0 Hz | 50 ms, all | 79 % |
+| `BESTNAVB 0.02` | 50.0 Hz | 20 ms, all (2944 frames) | 54 % |
+| `BESTNAVB 0.02`, `STADOPB 1`, `HWSTATUSB 1` | 49.2 Hz | 20 ms, plus one 1 s gap | 54 % |
+
+- **SG 8 accepts the `0.02` period that SG 2 refuses**, as the manual says (Table 4-61).
+- **50 Hz costs much more receiver CPU:** idle drops from about 79 % at 20 Hz to about 54 %. At 20 Hz, SG 8 costs the same as SG 2.
+- **The 1 s gap shows up at 50 Hz too** (about 50 epochs missing once), so it isn't tied to the 20 Hz rate.
+- **Signals tracked on SG 8:** GPS L1C/A, L2C, L5; BDS B1I, B3I, B1C, B2a; Galileo E1, E5a, E5b. **No GLONASS, BDS B2b or Galileo E6**, which matches Table 4-60. With the antenna indoors (about 14 satellites at 30–38 dB-Hz), the counts can't be compared with the UM982 sky test, only which signals appear.
+- **For this project:** the firmware runs at 20 Hz, which SG 2 already reaches with GLONASS, so SG 2 stays the UM980 target. SG 8 is only worth it if 50 Hz output is ever wanted, at the cost of GLONASS.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
