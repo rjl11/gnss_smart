@@ -286,12 +286,12 @@ Not done yet:
    - Which signals ANT2 tracks in groups 6 and 5 (the sky test had no slave antenna). Group 6 is expected to lack GLONASS, which matters for heading.
    - Whether `CONFIG SBAS ENABLE` makes the receiver track EGNOS. No SBAS was tracked in any group.
    - ~~Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together.~~ It does without a slave antenna (bench results 2026-11-12, `3 6` rate test). Repeat with ANT2 connected and a real heading solution.
-   - What causes the occasional 1 s gap in BESTNAVB (one missing second about once a minute, on the UM982 on `3 6` and `7 0` and on the UM980 on SG 2, with any log set). Log 10 min and look for a pattern (ToDo in [TODO.md](../TODO.md)).
+   - ~~What causes the occasional 1 s gap in BESTNAVB.~~ It is a start-up effect: after the log commands, the receiver sends one BESTNAVB on the whole second and the 20 Hz stream starts one second later. In steady state no epoch was lost in 10 min (bench results 2026-11-12, UM980 gap capture). Seen on the UM980; the UM982 results came from the same script, so the same cause is very likely there.
    - Whether a factory-new receiver is already at the target signal group. If so, there is no reboot after `CONFIG SIGNALGROUP`.
    - Whether the UM982 accepts `CONFIG PVTALG MULTI` and then lists it in `CONFIG`, as the UM980 does. The fast-path check requires the line, so a UM982 that doesn't list it would be re-provisioned on every boot (up to the two-attempt limit).
    - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). If `CONFIG` only lists non-default items, the fast-path text match must allow for that.
-   - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ("Comparison: the AgOpenGPS UM982 settings"), and that the parser rejects them.
-   - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value.
+   - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ("Comparison: the AgOpenGPS UM982 settings"), and that the parser rejects them. None in 10 min on the UM980 indoors (15 to 19 satellites in the solution throughout, bench results 2026-11-12, UM980 gap capture); still to watch for on the UM982 and in the field.
+   - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value. On the UM980 (already warm) it read about 60 000 and rose from 59.9 to 61.1 over 10 min (bench results 2026-11-12, UM980 gap capture), which fits °C × 1000; the cold-start reading and the thermometer check are still open.
    - The UNIHEADING position-type values that mean a fixed heading, and the heading latency against BESTNAV in the same epoch.
    - VARIABLELENGTH against TRACTOR behaviour, and what `CONFIG` shows after both are sent (the AgOpenGPS file sends both).
    - The 5 V current of each module at 20 Hz (the UM982 datasheet's 600 mW is for 10 Hz), and the module's COM1 and PPS logic level (3.3 V expected).
@@ -391,7 +391,7 @@ Same module and setup as the sky test (master antenna only, on the sky, miniPi o
 | the same plus `OBSVMB 1` | 20.0 Hz | 50 ms, all | 70 % |
 | `BESTNAVB 0.02` | refused: `PARSING FAILED FIELD OUT OF RANGE,Period 0.02 is not supported for this log message!` | — | — |
 
-  - **20 Hz is the maximum.** Each of two runs had one 1 s gap (about 20 epochs missing). The cause isn't known; the parser and the filter must tolerate it.
+  - **20 Hz is the maximum.** Each of two runs had one 1 s gap (about 20 epochs missing). Later traced to a start-up effect (bench results 2026-11-12, UM980 gap capture).
   - CPU idle is header byte 3 (§7.5.1). It drops from 84 % at 10 Hz to 70 % at 20 Hz, and the extra logs don't move it.
 - **miniPi loses data at 460800.** With the receiver at 460800, about 20 % of the bytes never arrived: most binary frames failed the CRC, and `CONFIG` text came back with pieces missing. Raw `cat` of the port lost the same, so the script isn't the cause. The kernel log shows `dwc_otg_hcd_urb_dequeue: Timed out waiting for FSM NP transfer`, which points at miniPi's USB host or the CH340 at that rate. At 115200 nothing was lost, so the E6 and rate figures above were taken with COM3 set to 115200 without `SAVECONFIG`, then `RESET` back to the saved 460800. The Pico uses COM1 over its UART, so this doesn't affect the firmware. A PC on the USB-C port at 460800 hasn't been checked.
 
@@ -409,7 +409,7 @@ Same setup (master antenna only, on the sky; slave antenna not connected). The s
 
 - **20 Hz is the maximum on `3 6` too**, the same as `7 0`. The manual's "under specific log requests" (Table 4-61) doesn't limit the target log set.
 - **UNIHEADINGB keeps pace:** 1177 frames against 1177 BESTNAVB frames in the same 60 s, for about 5 % more receiver CPU. Without ANT2 these were empty heading solutions, so the cost with a real heading is still open.
-- **The 1 s gap appears here as well:** one missing second in about half the runs, independent of the log set and the signal group. The cause isn't known (open question above).
+- **The 1 s gap appears here as well:** one missing second in about half the runs, independent of the log set and the signal group. Later traced to a start-up effect (bench results 2026-11-12, UM980 gap capture).
 
 ## Bench results (2026-11-12, UM980 on SG 2: navigation rate)
 UM980 module, R4.10Build25621, on miniPi over its USB-C port (COM3, `/dev/ttyUSB0`, 115200), antenna indoors (the receiver still had a `SINGLE` fix in every epoch, so the rates hold). Before the test its configuration was saved in [docs/receiver-configs/um980-as-received-2026-11-12.md](../docs/receiver-configs/um980-as-received-2026-11-12.md): `SIGNALGROUP 2`, `MODE ROVER SURVEY`, all ports at 115200 and five NMEA logs on COM3. The script sent `UNLOG COM3` (not saved), ran each log set for 60 s, then sent `RESET`; the receiver came back with its saved config and logs. CRC errors: 0 in every row. Solution `SINGLE` throughout, no RTCM.
@@ -425,7 +425,7 @@ UM980 module, R4.10Build25621, on miniPi over its USB-C port (COM3, `/dev/ttyUSB
 
 - **20 Hz is the maximum on SG 2**, and the target log set reaches it. For 50 Hz on SG 8, see the next section.
 - **More headroom than the UM982:** about 78 % CPU idle at 20 Hz, against about 70 % on the UM982 (`3 6` and `7 0`).
-- **The 1 s gap appears on the UM980 too**, with the same pattern as on the UM982. Both receivers were read through the same miniPi and USB cable, so the cause could be on the host side or common to the Unicore firmware (ToDo in [TODO.md](../TODO.md)).
+- **The 1 s gap appears on the UM980 too**, with the same pattern as on the UM982. It turned out to be a start-up effect, not a loss (bench results 2026-11-12, UM980 gap capture).
 
 ## Bench results (2026-11-12, UM980 on SG 8: 50 Hz)
 Same UM980 and setup (115200, antenna indoors). The script sent `CONFIG SIGNALGROUP 8` (it rebooted in about 10 s), `UNLOG COM3`, waited 150 s, recorded 60 s of `OBSVMB COM3 1`, then ran each log set for 60 s. At the end it sent `CONFIG SIGNALGROUP 2`; the receiver rebooted back to its saved state (SG 2, the five NMEA logs, `MODE ROVER SURVEY`). CRC errors: 0 in every row, so 115200 is enough for 50 Hz BESTNAVB. Solution `SINGLE` throughout, no RTCM.
@@ -441,6 +441,25 @@ Same UM980 and setup (115200, antenna indoors). The script sent `CONFIG SIGNALGR
 - **The 1 s gap shows up at 50 Hz too** (about 50 epochs missing once), so it isn't tied to the 20 Hz rate.
 - **Signals tracked on SG 8:** GPS L1C/A, L2C, L5; BDS B1I, B3I, B1C, B2a; Galileo E1, E5a, E5b. **No GLONASS, BDS B2b or Galileo E6**, which matches Table 4-60. With the antenna indoors (about 14 satellites at 30–38 dB-Hz), the counts can't be compared with the UM982 sky test, only which signals appear.
 - **For this project:** the firmware runs at 20 Hz, which SG 2 already reaches with GLONASS, so SG 2 stays the UM980 target. SG 8 is only worth it if 50 Hz output is ever wanted, at the cost of GLONASS.
+
+## Bench results (2026-11-12, UM980 gap capture: the 1 s BESTNAVB gap)
+Same UM980 (R4.10Build25621, SG 2) on miniPi over COM3 at 115200, antenna indoors. The script sent `UNLOG COM3` (not saved), then `BESTNAVB COM3 0.05`, `STADOPB COM3 1` and `HWSTATUSB COM3 1`, and recorded every byte read for 600 s with a host timestamp per read. At the end it sent `RESET`; the receiver came back with its saved config and the five NMEA logs.
+
+| Item | Result |
+|---|---|
+| Bytes and frames | 1 875 164 B; 11 976 BESTNAVB, 600 STADOPB, 600 HWSTATUSB |
+| CRC errors, bytes outside frames | 0 and 0. No `dwc_otg` warnings in dmesg during the capture |
+| BESTNAVB gaps | 1, in the first second: one frame at ToW 419975.000, the next at 419976.000, then 50 ms spacing for the remaining 599 s |
+| Host side | the only read silence over 40 ms is the same 0.97 s at the start |
+| Receiver CPU idle | 75.8 % mean, 75 % minimum |
+| Solution | `SOL_COMPUTED` / `SINGLE` in every epoch; 23–24 satellites tracked, 15–19 in the solution, no epoch with 0 |
+| STADOPB | HDOP 0.93–1.19 (fifth float), no 9999 values |
+| HWSTATUS field 1 | 59 928 → 61 132 (1-minute means), range 58 620 to 62 177 |
+
+- **The 1 s gap is a start-up effect, not a loss.** After the log commands, the receiver sends one BESTNAVB on the next whole second, pauses until the following whole second, and only then runs at 20 Hz. The STADOPB and HWSTATUSB frames of that second arrive in between. After that, no epoch was missing in 10 min, and neither the receiver nor the USB link dropped anything.
+- **Why the 60 s tests showed it in about half the runs:** their timing started right after the log commands, so the start-up pause fell inside the measurement whenever the first frame arrived after the input flush. The UM982 runs used the same script, so the same cause is very likely there; not re-checked on the UM982.
+- **For the firmware:** a 1 s gap right after provisioning or after `RESET` is expected. The "BESTNAVB at 20 Hz" checks (Verification 2 and 4) should start counting after the first two seconds of output. In steady state, a missing epoch is a real fault worth counting in the diagnostics.
+- **HWSTATUS field 1** read about 60 000 on a receiver that had been on for about an hour and rose by about 1.2 over 10 min. That fits °C × 1000 (about 60 °C), as the AiO README deduces. A cold-start reading and a thermometer comparison are still needed to confirm it.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
