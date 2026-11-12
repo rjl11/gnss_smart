@@ -40,6 +40,7 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 | Cold start (TTFF) | < 12 s (UM980 HW Table 1-1) | < 30 s (product brief) |
 | Power (bare part, 3.3 V) | 145 mA typical, **180 mA maximum**, 480 mW (UM980 HW Table 2-3) | 180 mA typical, **300 mA maximum**, 600 mW (HW Table 2-4) |
 | UART logic | LVTTL at VCC (3.0–3.6 V): in high ≥ 0.7 VCC, out high ≥ VCC − 0.45 V at 2 mA (UM980 HW Table 2-4) | LVTTL (product brief) |
+| Firmware build | latest we have: R4.10Build25621; our module's build not yet read | R4.10Build18975, the latest we have and the one our module runs. See "Receiver firmware builds" |
 
 This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs nothing here.
 
@@ -105,6 +106,19 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - **`HEADINGSTATUSB`** (ID 521, §7.5.43) echoes the `CONFIG HEADING LENGTH` setting. It isn't needed in "Run".
   - `BESTNAV` refers to the master antenna (ANT1); the slave antenna's position is in a separate log, `BESTNAVH` (§7.5.20).
   - Heading accuracy is **0.1° RMS for a 1 m baseline** (HW Table 1-1, and the product brief). It scales roughly with 1/baseline, so a 2 m bar gives about 0.05° (estimate, not yet measured). RTK accuracy is the same as the UM980: 0.8 cm + 1 ppm H, 1.5 cm + 1 ppm V.
+
+## Receiver firmware builds
+The latest builds we have are in `docs/firmware/unicore/`, with the original release notes and English translations in its [README](../docs/firmware/unicore/README.md). They come from https://github.com/AlksSAV/gnss-firmware (copied 2026-11-12). Flashing stays out of scope for the Pico firmware: UPrecise on a PC over USB-C (COM3), as in [rp2350-feasibility.md](rp2350-feasibility.md).
+
+- **UM980 R4.10Build25621** (no date): adapts to the new BeiDou PRN numbering and updates the RTK library for it and for the BeiDou-2 retirement; fixes B2b-PPP after the PRN rework; steadier L6 MADOCA-PPP; Unicore-proprietary compact corrections; better high-reliability mode fixing; anti-spoofing detection with warning messages; QZSS L1C/B tracking and L1S (SLAS) positioning.
+- **UM982 R4.10Build18975** (2025-04-30): TruePoint ionosphere service (`CONFIG TPIONUSE ENABLE`); QZSS L6 MADOCA-PPP (`CONFIG PPP ENABLE L6MDCPPP`) and its fusion in PPP auto mode; RTK-assisted PPP (cm within 20 s after an RTK fix, holds > 1 min after RTK loss); a configurable PVT reliability threshold; smoother best position when the position type changes; anti-jamming changes on the master antenna; GSV's last field is now the signal ID (NMEA 0183 v4.11 errata).
+
+What this means here:
+- **BeiDou PRN rework.** The UM980 notes say builds before 25621 lost B2b-PPP and RTK stability after BeiDou's PRN change. Update every UM980 module to 25621 or later before field use. Build 18975 is the newest UM982 build we have and its notes don't mention the PRN rework, so look for a newer UM982 build with the same fix. Whether 18975 is affected in RTK use is not known (not yet checked).
+- **Build check at boot.** Identify already reads the build from `VERSIONA` for the diagnostics page. Add a warning (log and diagnostics) when a UM980 reports a build below 25621. Don't refuse the receiver.
+- **GSV signal ID** only matters if the receiver's own NMEA GSV is passed through to SW Maps. Our NMEA out is built by the Pico, so it has no effect now.
+- **Not used:** PPP (B2b, MADOCA), TruePoint and the proprietary correction format. This project uses RTK from NTRIP RTCM. RTK-assisted PPP could bridge RTK outages, but it needs PPP enabled, which the target configuration doesn't do.
+- **Diagnostics candidates:** the UM980 anti-spoofing warning (log name not known yet; look it up in the N4 manual R1.16) and the UM982 PVT reliability threshold (command not yet looked up).
 
 ## Target configuration
 | Item | UM980 single | UM982 single | UM982 dual | Why |
@@ -262,6 +276,7 @@ Not done yet:
 9. **Open questions to settle on the bench:**
    - The acknowledgement and error text on a UM980 (confirmed on a UM982).
    - That the UM980 module has the same port mapping as the UM982 module (USB-C = COM3, pins = COM1 and COM2).
+   - The UM980 module's firmware build (`VERSIONA COM3`). If it is below 25621, flash `docs/firmware/unicore/um980/UM980_R4.10Build25621.pkg` with UPrecise and record the build before and after.
    - At which baud the `CONFIG COM1` reply arrives.
    - Whether UM980 SG 2 really gives 20 Hz. If not, fall back to SG 8 and record what that loses (GLONASS, among others).
    - ~~Whether the UM982 accepts `SIGNALGROUP 2 0`.~~ It doesn't (bench results 2026-11-12), so the target table's fallback is used.

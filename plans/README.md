@@ -14,7 +14,7 @@ Planning documents for gnss_smart: system architecture, hardware selection (MCU,
 | [imu-tm210-config.md](imu-tm210-config.md) | TM210 auto-configuration by the MCU: Setting object, boot check/provision state machine, RAM-then-flash commit |
 | [imu-adis16465-vs-tm210.md](imu-adis16465-vs-tm210.md) | ADIS16465-2 as an alternative IMU: datasheet comparison, system effect, firmware impact |
 | [gnss-mosaic-x5-vs-um980.md](gnss-mosaic-x5-vs-um980.md) | Septentrio mosaic-X5 as an alternative GNSS receiver: datasheet comparison, system effect, firmware impact |
-| [gnss-um98x-config.md](gnss-um98x-config.md) | UM980 / UM982 auto-configuration by the MCU: single/dual antenna mode (compile-time default, web override, applied at reboot), per-mode command set, boot check/provision state machine, COM1 shared by commands and RTCM, dual-antenna heading into INSLIB `m.yaw` |
+| [gnss-um98x-config.md](gnss-um98x-config.md) | UM980 / UM982 auto-configuration by the MCU: single/dual antenna mode (compile-time default, web override, applied at reboot), per-mode command set, boot check/provision state machine, COM1 shared by commands and RTCM, dual-antenna heading into INSLIB `m.yaw`, receiver firmware builds and what their change logs mean here |
 | [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) | RTCM from SW Maps (Android NTRIP) over Bluetooth to UM980 COM1; replaces the radio |
 | [rtos-decision.md](rtos-decision.md) | Bare metal first, FreeRTOS later |
 | [web-config-server.md](web-config-server.md) | GPIO-toggled web config and diagnostics server |
