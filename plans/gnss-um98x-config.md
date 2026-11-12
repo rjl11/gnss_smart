@@ -285,7 +285,7 @@ Not done yet:
    - Which signals ANT2 tracks in groups 6 and 5 (the sky test had no slave antenna). Group 6 is expected to lack GLONASS, which matters for heading.
    - Whether `CONFIG SBAS ENABLE` makes the receiver track EGNOS. No SBAS was tracked in any group.
    - ~~Whether SG 3 6 reaches 20 Hz for BESTNAVB and UNIHEADINGB together.~~ It does without a slave antenna (bench results 2026-11-12, `3 6` rate test). Repeat with ANT2 connected and a real heading solution.
-   - What causes the occasional 1 s gap in BESTNAVB (one missing second about once a minute, on `3 6` and `7 0`, with any log set). Log 10 min and look for a pattern.
+   - What causes the occasional 1 s gap in BESTNAVB (one missing second about once a minute, on `3 6` and `7 0`, with any log set). Log 10 min and look for a pattern (ToDo in [TODO.md](../TODO.md)).
    - Whether a factory-new receiver is already at the target signal group. If so, there is no reboot after `CONFIG SIGNALGROUP`.
    - Whether the UM982 accepts `CONFIG PSRVELDRPOS DISABLE` and whether it then shows in `CONFIG` (it doesn't appear as shipped). If `CONFIG` only lists non-default items, the fast-path text match must allow for that.
    - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ("Comparison: the AgOpenGPS UM982 settings"), and that the parser rejects them.

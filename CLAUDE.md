@@ -72,4 +72,5 @@ Work only on `main`. Don't create branches, worktrees or pull requests; commit s
 - A hardware or architecture decision usually touches several plans (for example, the pin/UART table in `rp2350-feasibility.md`, the core split in `rtos-decision.md` and the companion plans). Keep them consistent.
 - PDFs live in `docs/datasheets/` (component datasheets) and `docs/` (manuals and guides, e.g. the Unicore N4 commands manual). Grep `plans/` for a PDF's path when moving it.
 - `docs/firmware/unicore/` holds UM980 / UM982 receiver firmware (`.pkg`, latest build per model) with release notes and English translations in its `README.md`. It is flashed with UPrecise over the module's USB-C (COM3), never from the Pico.
+- Open work items are kept in `TODO.md` at the repo root, each linking to the plan that holds the details.
 - Figures marked "estimate, not yet measured" in the plans are unverified. Don't present them as measured.
