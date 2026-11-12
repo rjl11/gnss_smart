@@ -35,6 +35,18 @@ target_include_directories(app PRIVATE app)
 
 target_compile_options(app PRIVATE -Wall -Wextra)
 
+# GNSS antenna mode default: single (UM980, or UM982 with the slave antenna
+# off) or dual (UM982 with heading). See app/app_config.h.
+set(GNSS_ANTENNA_MODE single CACHE STRING "GNSS antenna mode default: single or dual")
+set_property(CACHE GNSS_ANTENNA_MODE PROPERTY STRINGS single dual)
+if(GNSS_ANTENNA_MODE STREQUAL "dual")
+    target_compile_definitions(app PRIVATE APP_GNSS_ANTENNA_MODE=1)
+elseif(GNSS_ANTENNA_MODE STREQUAL "single")
+    target_compile_definitions(app PRIVATE APP_GNSS_ANTENNA_MODE=0)
+else()
+    message(FATAL_ERROR "GNSS_ANTENNA_MODE must be single or dual, not '${GNSS_ANTENNA_MODE}'")
+endif()
+
 target_link_libraries(app PRIVATE
     pico_stdlib
     pico_multicore

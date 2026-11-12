@@ -202,7 +202,7 @@ In VARIABLELENGTH mode the receiver doesn't check the baseline length against a 
   - The baseline-length gate passes.
   - The log is no older than INSLIB's 500 ms limit (`INS_MAX_DELAY_MS`).
 - **`m.yaw_delay_ms` / `yaw_delay_us`:** the same as the GNSS epoch, from the log's GNSS time against the PPS-anchored capture time.
-- **One epoch:** UNIHEADINGB and BESTNAVB with the same GNSS time go to core 1 in the same epoch, through the same core 0 → core 1 queue. Core 1 only gets a filled `m.yaw`.
+- **One queue:** UNIHEADINGB and BESTNAVB go to core 1 through the same core 0 → core 1 queue, as separate items, each with its own time of validity, so their arrival order doesn't matter. Core 1 only gets a heading that passed the checks below, and fills `m.yaw` from it.
 - **Auto-init:** with `auto_init` true, the INS bootstraps yaw from the external yaw measurement (`ins.h`, auto-init comment). In dual mode the yaw is then known before the tractor moves.
 - **Mag:** unchanged (not fed to the INS).
 - What is lost with `automotive_mode` off: no heading aiding while the dual-antenna heading is invalid but the position is good (e.g. ANT2 shadowed). The gyro holds yaw over such gaps. Field logs should show how often that happens. If it does, revisit: feed course yaw from the firmware side as a second `m.yaw` source only when the UNIHEADING is invalid and the tractor is moving forward.
@@ -220,12 +220,17 @@ The antenna-mode setting is read from flash at boot, before core 1 starts, so co
 ## Core split
 Everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)): detection, provisioning, the parsers (including UNIHEADINGB, the baseline gate and the offset) and the TX arbiter. Core 1 gets GNSS samples only once state "Run" is reached; until then INSLIB runs without GNSS. Core 1 adds nothing for the UM982 except reading `m.yaw` and taking `automotive_mode` from the antenna mode at init.
 
-## Firmware impact (not done yet)
-The first demo (`firmware/`) predates this plan:
-- `firmware/app/app_config.h`: add `APP_GNSS_ANTENNA_MODE` (single by default). Remove `APP_MODEL_WAIT_MS` once core 1 no longer waits for the model.
-- `firmware/drivers/um980/um980_cfg.c`: one target table per effective mode. Today it has only the UM980 table and recognises a UM982 without configuring it.
-- `firmware/app/nav_core1.c`, `firmware/app/main.c`: init from the setting, re-init only in the mismatch case, instead of waiting up to 10 s for the model.
-- The web config page that stores the override doesn't exist yet. Until it does, the compile-time default is the setting.
+## Firmware status
+Done in the first demo (`firmware/`, built, not yet run on hardware):
+- `APP_GNSS_ANTENNA_MODE` in `firmware/app/app_config.h`, set from CMake with `-DGNSS_ANTENNA_MODE=single|dual` (default single).
+- `firmware/drivers/um980/um980_cfg.c`: Identify accepts both receivers and picks the effective mode, the signal-group command and the target items; provisioning and the fast-path check follow the mode (`HEADING VARIABLELENGTH` and UNIHEADINGB only in dual).
+- `firmware/drivers/um980/um980.c` decodes UNIHEADINGB; `firmware/app/main.c` applies the fixed-type check, the baseline-length median gate, `baseline_yaw_b` (`APP_BASELINE_YAW_DEG`) and the σ floor, and sends the heading to core 1 as its own queue item with its own time of validity and delay. Core 1 fills `m.yaw` from it.
+- `firmware/app/nav_core1.c` starts the filter at once from the setting and re-initialises only in the mismatch case. `APP_MODEL_WAIT_MS` is gone.
+
+Not done yet:
+- The flash override from the web page (no web server yet). Until then the compile-time default is the setting.
+- `HWSTATUSB COM1 1`: the demo still provisions and checks two logs (three in dual), not three (four).
+- `$GNHDT` output (no Bluetooth in the demo) and the diagnostics page.
 
 ## Verification (bench, when implemented)
 1. **Provisioning, per mode:** a factory-new UM980, a UM982 with setting single, and a UM982 with setting dual are each provisioned with no user action. The log shows every step OK and the total time (40–60 s, estimate, not yet measured).

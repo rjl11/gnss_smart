@@ -42,6 +42,17 @@ static um980_nav_t s_last_nav;
 static bmp581_sample_t s_last_baro;
 static bool s_have_nav;
 
+/* Dual-antenna heading: baseline-length gate (plans/gnss-um98x-config.md,
+ * "VARIABLELENGTH and the mount"). The median is over the last fixed epochs. */
+#define BASELINE_HIST       31
+#define BASELINE_MIN_HIST   5
+static float s_base_hist[BASELINE_HIST];
+static unsigned s_base_n, s_base_pos;
+static um980_heading_t s_last_hdg;
+static bool s_have_hdg;
+static float s_base_median_m;
+static uint32_t s_hdg_used, s_hdg_gated;
+
 static bool baro_start(void)
 {
     bmp581_config_t cfg;
@@ -86,6 +97,70 @@ static void forward_gnss(const um980_nav_t *n)
 
     if (g.pos_valid || g.vel_valid) {
         nav_push_gnss(&g);
+    }
+}
+
+static float median(const float *v, unsigned n)
+{
+    float s[BASELINE_HIST];
+    for (unsigned i = 0; i < n; i++) {
+        s[i] = v[i];
+    }
+    for (unsigned i = 1; i < n; i++) { /* insertion sort, n <= 31 at 20 Hz */
+        float x = s[i];
+        unsigned j = i;
+        while (j > 0 && s[j - 1] > x) {
+            s[j] = s[j - 1];
+            j--;
+        }
+        s[j] = x;
+    }
+    return s[n / 2];
+}
+
+/* A fixed heading whose baseline length agrees with the running median goes
+ * to core 1 as the body yaw. The first few fixed epochs only fill the
+ * median. */
+static void forward_heading(const um980_heading_t *h)
+{
+    if (!h->fixed) {
+        return;
+    }
+    bool gate_ok = false;
+    if (s_base_n >= BASELINE_MIN_HIST) {
+        s_base_median_m = median(s_base_hist, s_base_n);
+        gate_ok = fabsf(h->length_m - s_base_median_m) <= APP_BASELINE_GATE_M;
+    }
+    s_base_hist[s_base_pos] = h->length_m;
+    s_base_pos = (s_base_pos + 1u) % BASELINE_HIST;
+    if (s_base_n < BASELINE_HIST) {
+        s_base_n++;
+    }
+    if (!gate_ok) {
+        if (s_base_n > BASELINE_MIN_HIST) {
+            s_hdg_gated++;
+        }
+        return;
+    }
+
+    /* Heading is clockwise from true north, as NED yaw. */
+    double yaw = (double)(h->heading_deg - APP_BASELINE_YAW_DEG) / DEG;
+    yaw = remainder(yaw, 2.0 * M_PI);
+    float sd = h->sd_heading_deg;
+    float floor_deg = APP_HEADING_SD_FLOOR_DEG_1M / h->length_m;
+    if (sd < floor_deg) {
+        sd = floor_deg;
+    }
+
+    nav_gnss_t g = { 0 };
+    g.t_valid_us = h->t_valid_us;
+    g.yaw_valid = true;
+    g.yaw_rad = (float)yaw;
+    g.yaw_sd_rad = (float)(sd / DEG);
+    g.week = h->week;
+    g.tow_ms = h->tow_ms;
+    if (nav_push_gnss(&g)) {
+        s_hdg_used++;
     }
 }
 
@@ -140,11 +215,23 @@ static void print_status(uint64_t now)
         printf("  %s build %lu", um980_model(&s_gnss) == UM980_PRODUCT_UM980 ? "UM980" :
                um980_model(&s_gnss) == UM980_PRODUCT_UM982 ? "UM982" : "other",
                (unsigned long)s_gnss.build);
+        printf("  %s antenna", um980_dual(&s_gnss) ? "dual" : "single");
     }
     if (um980_last_error(&s_gnss) != UM980_OK) {
         printf("  [%s]", um980_strerror(um980_last_error(&s_gnss)));
     }
     printf("\n");
+    if (um980_dual_refused(&s_gnss)) {
+        printf("      warning: dual antenna is set, but a UM980 is fitted: running single\n");
+    }
+    if (um980_dual(&s_gnss) && s_have_hdg) {
+        printf("      heading %.2f deg  sd %.2f  pitch %.2f  %s  baseline %.3f m (median %.3f)"
+               "  used %lu  gated %lu\n",
+               (double)s_last_hdg.heading_deg, (double)s_last_hdg.sd_heading_deg,
+               (double)s_last_hdg.pitch_deg, fix_name(s_last_hdg.pos_type),
+               (double)s_last_hdg.length_m, (double)s_base_median_m, (unsigned long)s_hdg_used,
+               (unsigned long)s_hdg_gated);
+    }
     if (s_have_nav) {
         printf("      %s  sv %u/%u  hdop %.1f  age %.1f s  time %s\n", fix_name(s_last_nav.pos_type),
                s_last_nav.n_used, s_last_nav.n_tracked, gs->dop_valid ? (double)gs->hdop : 0.0,
@@ -167,10 +254,10 @@ static void print_status(uint64_t now)
     }
 
     if (o.t_us == 0) {
-        printf("NAV   waiting for the receiver model\n");
+        printf("NAV   starting\n");
     } else {
-        printf("NAV   %-15s update mean %lu us, max %lu us  stack %lu/%lu B  drops %lu\n",
-               nav_mode_name(o.mode), (unsigned long)o.update_us_mean,
+        printf("NAV   %-15s %s  update mean %lu us, max %lu us  stack %lu/%lu B  drops %lu\n",
+               nav_mode_name(o.mode), o.dual ? "dual" : "single", (unsigned long)o.update_us_mean,
                (unsigned long)o.update_us_max, (unsigned long)nav_stack_used(),
                (unsigned long)nav_stack_size(), (unsigned long)nav_queue_drops());
         if (o.rpy_valid) {
@@ -193,9 +280,9 @@ static void print_status(uint64_t now)
                    (double)o.gyr_bias[0], (double)o.gyr_bias[1], (double)o.gyr_bias[2],
                    (double)o.acc_bias[0], (double)o.acc_bias[1], (double)o.acc_bias[2]);
         }
-        printf("      epochs: imu %lu  gnss %lu (late %lu)  baro %lu (late %lu)\n",
+        printf("      epochs: imu %lu  gnss %lu (late %lu)  yaw %lu  baro %lu (late %lu)\n",
                (unsigned long)o.n_updates, (unsigned long)o.n_gnss, (unsigned long)o.n_gnss_late,
-               (unsigned long)o.n_baro, (unsigned long)o.n_baro_late);
+               (unsigned long)o.n_yaw, (unsigned long)o.n_baro, (unsigned long)o.n_baro_late);
         printf("      rx ring overflows: imu %lu  gnss %lu\n",
                (unsigned long)s_imu_port.rx_overflows, (unsigned long)s_gnss_port.rx_overflows);
     }
@@ -220,16 +307,22 @@ int main(void)
     }
 
     const tm210_config_t imu_cfg = { .acc_is_gravity = APP_TM210_ACC_IS_GRAVITY, .verbose = true };
-    const um980_config_t gnss_cfg = { .pps_pin = PIN_UM980_PPS, .verbose = true };
+    /* The antenna-mode setting. The web page will override it from flash. */
+    const bool dual_set = APP_GNSS_ANTENNA_MODE == APP_ANTENNA_DUAL;
+    printf("GNSS antenna mode setting: %s\n", dual_set ? "dual" : "single");
+
+    const um980_config_t gnss_cfg = {
+        .pps_pin = PIN_UM980_PPS, .dual_antenna = dual_set, .verbose = true,
+    };
     tm210_init(&s_imu, &s_imu_port, &imu_cfg);
     um980_init(&s_gnss, &s_gnss_port, &gnss_cfg);
     s_baro_ok = baro_start();
 
-    nav_start();
+    nav_antenna_t ant_sent = dual_set ? NAV_ANT_DUAL : NAV_ANT_SINGLE;
+    nav_start(ant_sent);
 
     uint64_t next_status = time_us_64() + STATUS_PERIOD_US;
     uint64_t next_baro_try = time_us_64() + BARO_RETRY_US;
-    int model_sent = 0;
 
     for (;;) {
         /* IMU: every sample goes to core 1. */
@@ -250,15 +343,30 @@ int main(void)
 
         /* GNSS: epochs flow once the receiver is configured. */
         um980_nav_t gn;
-        while (um980_poll(&s_gnss, &gn)) {
+        um980_heading_t gh;
+        for (;;) {
+            bool have_nav = um980_poll(&s_gnss, &gn);
+            if (um980_take_heading(&s_gnss, &gh)) {
+                forward_heading(&gh);
+                s_last_hdg = gh;
+                s_have_hdg = true;
+            }
+            if (!have_nav) {
+                break;
+            }
             forward_gnss(&gn);
             s_last_nav = gn;
             s_have_nav = true;
         }
-        if (um980_model(&s_gnss) != model_sent) {
-            model_sent = um980_model(&s_gnss);
-            nav_set_receiver_model(model_sent == UM980_PRODUCT_UM982 ? NAV_RX_DUAL_ANTENNA
-                                                                      : NAV_RX_SINGLE_ANTENNA);
+        /* Once the receiver is identified, the filter follows the effective
+         * mode. That differs from the setting only when dual is set and a
+         * UM980 is fitted. */
+        if (um980_model(&s_gnss) != 0) {
+            nav_antenna_t ant = um980_dual(&s_gnss) ? NAV_ANT_DUAL : NAV_ANT_SINGLE;
+            if (ant != ant_sent) {
+                ant_sent = ant;
+                nav_set_antenna_mode(ant);
+            }
         }
 
         /* Barometer. */

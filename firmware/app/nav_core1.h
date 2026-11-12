@@ -17,10 +17,9 @@
 #include <stdint.h>
 
 typedef enum {
-    NAV_RX_UNKNOWN = 0,
-    NAV_RX_SINGLE_ANTENNA, /* UM980: yaw from the GNSS course over ground   */
-    NAV_RX_DUAL_ANTENNA    /* UM982: yaw from the receiver's heading        */
-} nav_receiver_t;
+    NAV_ANT_SINGLE = 0,    /* yaw from the GNSS course over ground          */
+    NAV_ANT_DUAL           /* UM982: yaw from the dual-antenna heading      */
+} nav_antenna_t;
 
 /* IMU sample in FRD SI units. */
 typedef struct {
@@ -32,11 +31,15 @@ typedef struct {
     bool     mag_new;
 } nav_imu_t;
 
-/* GNSS epoch. */
+/* GNSS epoch: a BESTNAV position/velocity, or a dual-antenna heading. Each
+ * kind comes as its own item with its own time of validity. */
 typedef struct {
     uint64_t t_valid_us;   /* time of validity, Pico clock                  */
     bool     pos_valid;
     bool     vel_valid;
+    bool     yaw_valid;
+    float    yaw_rad;      /* body yaw, NED, -pi..pi                        */
+    float    yaw_sd_rad;
     double   lat_rad;
     double   lon_rad;
     double   h_ell_m;      /* height above the WGS84 ellipsoid              */
@@ -72,6 +75,8 @@ typedef struct {
     uint32_t n_updates;    /* nav_suite_update() calls                      */
     uint32_t n_gnss;       /* GNSS epochs given to the filter               */
     uint32_t n_gnss_late;  /* GNSS epochs dropped: older than INSLIB's limit */
+    uint32_t n_yaw;        /* dual-antenna headings given to the filter     */
+    bool     dual;         /* antenna mode the filter was started with      */
     uint32_t n_baro;
     uint32_t n_baro_late;  /* barometer samples dropped: too old            */
     uint32_t update_us_max;  /* longest nav_suite_update() since the last report */
@@ -79,17 +84,19 @@ typedef struct {
     uint32_t n_reinit;     /* filter (re)initialisations                    */
 } nav_output_t;
 
-/* Creates the queues and starts core 1. */
-void nav_start(void);
+/* Creates the queues and starts core 1. The filter starts at once with the
+ * antenna-mode setting, which sets automotive_mode. */
+void nav_start(nav_antenna_t mode);
 
 /* Each returns false if the queue was full and the sample was dropped. */
 bool nav_push_imu(const nav_imu_t *s);
 bool nav_push_gnss(const nav_gnss_t *s);
 bool nav_push_baro(const nav_baro_t *s);
 
-/* Core 1 holds nav_suite_init() until this is known (or APP_MODEL_WAIT_MS has
- * passed), and initialises again if the model changes later. */
-void nav_set_receiver_model(nav_receiver_t model);
+/* The effective antenna mode, once the receiver is identified. Core 1
+ * re-initialises the filter only if it differs from the mode it runs with
+ * (dual set, but a UM980 fitted). */
+void nav_set_antenna_mode(nav_antenna_t mode);
 
 void nav_get_output(nav_output_t *out);
 

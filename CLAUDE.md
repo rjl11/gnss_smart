@@ -25,7 +25,7 @@ The target system (see `plans/README.md` for the index):
 - `firmware/CMakeLists.txt` is the project (board `pico2_w`, `copy_to_ram`, stdio on USB only, because UART0 is the TM210).
 - `firmware/app/`: `main.c` (core 0 loop and the 1 Hz status report), `nav_core1.c` (the filter on core 1 and its queues), `app_config.h` (mounting, noise figures, options).
 - **Every pin, bus instance and baud rate is in `firmware/app/board_pins.h`.** No other file names a GPIO number; drivers get their pins through their config structs.
-- `firmware/drivers/`: `uart_dma` (DMA ring receive, polled transmit), `tm210` and `um980` (parser plus boot check/provision state machine each), `bmp581`, `inslib` (CMake wrapper around `external/INSLIB`).
+- `firmware/drivers/`: `uart_dma` (DMA ring receive, polled transmit), `tm210` and `um980` (parser plus boot check/provision state machine each; `um980` drives both the UM980 and the UM982), `bmp581`, `inslib` (CMake wrapper around `external/INSLIB`).
 
 Build on the Windows PC (reload `Path`, `PICO_SDK_PATH`, `picotool_DIR` and `pioasm_DIR` from the User environment first if the shell is stale):
 
@@ -34,7 +34,7 @@ cmake -S firmware -B firmware/build -G Ninja
 ninja -C firmware/build
 ```
 
-The output is `firmware/build/app.uf2` (and `app.elf` for SWD). On miniPi, follow the rules under "Build host" below.
+The output is `firmware/build/app.uf2` (and `app.elf` for SWD). The GNSS antenna mode defaults to single; add `-DGNSS_ANTENNA_MODE=dual` to the cmake line for a UM982 with two antennas. On miniPi, follow the rules under "Build host" below.
 
 ## Drivers
 

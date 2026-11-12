@@ -1,9 +1,11 @@
 /*
- * Unicore UM980 GNSS receiver driver for the Pico SDK.
+ * Unicore UM980 / UM982 GNSS receiver driver for the Pico SDK.
  *
  *  - Receive: separates ASCII reply lines ($, #, <) from binary frames
- *    (AA 44 B5, CRC-32) on the one port, and decodes BESTNAVB, STADOPB and
- *    VERSIONB.
+ *    (AA 44 B5, CRC-32) on the one port, and decodes BESTNAVB, STADOPB,
+ *    UNIHEADINGB (UM982 in dual-antenna mode) and VERSIONB.
+ *  - Antenna mode: the caller asks for single or dual. Identify combines that
+ *    with the receiver found: dual needs a UM982, otherwise single is used.
  *  - PPS: the GPIO interrupt captures time_us_64() at the rising edge, and
  *    each BESTNAV epoch gets its time of validity on the Pico clock from it.
  *  - Boot state machine (um980_cfg.c): detect the baud rate, identify the
@@ -30,21 +32,24 @@ extern "C" {
 
 #define UM980_OK                 0
 #define UM980_E_NO_RECEIVER   (-101) /* nothing answered at any baud rate        */
-#define UM980_E_UNSUPPORTED   (-102) /* not a UM980, or firmware too old         */
+#define UM980_E_UNSUPPORTED   (-102) /* not a UM980/UM982, or firmware too old   */
 #define UM980_E_COMMAND       (-103) /* a command was rejected or not answered   */
 #define UM980_E_NO_REBOOT     (-104) /* no answer after FRESET / RESET           */
-#define UM980_E_SIGNALGROUP   (-105) /* CONFIG does not show SIGNALGROUP 2       */
+#define UM980_E_SIGNALGROUP   (-105) /* CONFIG does not show the signal group    */
 #define UM980_E_NOT_SAVED     (-106) /* check failed after SAVECONFIG and RESET  */
 #define UM980_E_RATE          (-107) /* BESTNAVB is not at 20 Hz                 */
 
 #define UM980_TARGET_BAUD        460800u
 #define UM980_PRODUCT_UM982      17
 #define UM980_PRODUCT_UM980      18
-#define UM980_MIN_BUILD          7923u
+#define UM980_MIN_BUILD          7923u  /* UM980, MODE ROVER (manual §3.4)    */
+#define UM982_MIN_BUILD          7650u  /* UM982, MODE ROVER                  */
+#define UM982_SG36_MIN_BUILD     10979u /* UM982 20 Hz on SIGNALGROUP 3 6     */
 
 /* Binary message IDs. */
 #define UM980_MSG_VERSION        37
 #define UM980_MSG_STADOP         954
+#define UM980_MSG_UNIHEADING     972
 #define UM980_MSG_BESTNAV        2118
 
 /* Solution status and position/velocity types (manual, tables 7-172, 7-173). */
@@ -72,8 +77,30 @@ typedef enum {
 
 typedef struct {
     int  pps_pin;          /* GPIO wired to PPS, or -1                      */
+    bool dual_antenna;     /* antenna-mode setting: true = dual (UM982 only) */
     bool verbose;          /* print state changes and replies with printf   */
 } um980_config_t;
+
+/* One UNIHEADING epoch (UM982 in dual-antenna mode, manual §7.5.99). */
+typedef struct {
+    uint64_t t_arrival_us;
+    uint64_t t_valid_us;   /* Pico time of validity (PPS), else = arrival   */
+    bool     t_from_pps;
+    uint16_t week;
+    uint32_t tow_ms;
+
+    uint32_t sol_status;   /* UM980_SOL_*                                   */
+    uint32_t pos_type;     /* UM980_TYPE_*                                  */
+    float    length_m;     /* baseline ANT1 -> ANT2                         */
+    float    heading_deg;  /* 0..360, clockwise from true north             */
+    float    pitch_deg;
+    float    sd_heading_deg;
+    float    sd_pitch_deg;
+    uint8_t  n_tracked;
+    uint8_t  n_used;
+
+    bool     fixed;        /* computed, fixed ambiguities, not INS          */
+} um980_heading_t;
 
 /* One BESTNAV epoch. */
 typedef struct {
@@ -112,6 +139,7 @@ typedef struct {
     uint32_t lines;         /* ASCII lines                                  */
     uint32_t nav_epochs;    /* BESTNAV frames                               */
     uint32_t nav_rate_hz;   /* BESTNAV frames in the last full second       */
+    uint32_t hdg_epochs;    /* UNIHEADING frames                            */
     uint32_t pps_edges;
     uint32_t provisions;    /* completed provisioning runs                  */
     float    hdop;          /* from STADOP                                  */
@@ -137,6 +165,16 @@ typedef struct {
     uint32_t build;
     char     sw_version[33];
     char     serial[66];
+
+    /* Effective antenna mode, set at Identify from cfg.dual_antenna and the
+     * model. */
+    bool     dual;         /* UM982 with both antennas                      */
+    bool     dual_refused; /* dual was asked for, but a UM980 is fitted     */
+    const char *sg_cmd;    /* "CONFIG SIGNALGROUP ..." for this mode        */
+
+    /* Latest UNIHEADING, handed out once by um980_take_heading(). */
+    um980_heading_t hdg;
+    bool     hdg_new;
 
     /* State machine (um980_cfg.c). */
     um980_state_t state;
@@ -180,6 +218,10 @@ void um980_init(um980_t *g, uart_dma_t *port, const um980_config_t *cfg);
  * false. */
 bool um980_poll(um980_t *g, um980_nav_t *out);
 
+/* Returns true once for each UNIHEADING epoch received in state RUN. Call it
+ * after um980_poll(). */
+bool um980_take_heading(um980_t *g, um980_heading_t *out);
+
 /* Starts detection and provisioning again (the "Reconfigure GNSS" action). */
 void um980_reconfigure(um980_t *g);
 
@@ -191,6 +233,10 @@ static inline const um980_stats_t *um980_stats(const um980_t *g) { return &g->st
 static inline int um980_last_error(const um980_t *g) { return g->last_error; }
 /* UM980_PRODUCT_UM980 / _UM982, or 0 while not identified. */
 static inline int um980_model(const um980_t *g) { return g->model; }
+/* Effective antenna mode, valid once um980_model() != 0. */
+static inline bool um980_dual(const um980_t *g) { return g->dual; }
+/* Dual antenna was asked for, but the receiver is a UM980. */
+static inline bool um980_dual_refused(const um980_t *g) { return g->dual_refused; }
 
 const char *um980_state_name(um980_state_t s);
 const char *um980_strerror(int err);

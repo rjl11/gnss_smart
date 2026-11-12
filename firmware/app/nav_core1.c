@@ -25,7 +25,7 @@
 static queue_t s_imu_q, s_gnss_q, s_baro_q, s_log_q;
 static critical_section_t s_out_lock;
 static nav_output_t s_out;                 /* guarded by s_out_lock */
-static volatile nav_receiver_t s_model;
+static volatile nav_antenna_t s_mode;
 static volatile uint32_t s_drops;
 
 /* AAPCS wants the stack pointer on an 8-byte boundary. */
@@ -60,7 +60,7 @@ static void log_sink(int level, const char *file, int line, const char *fmt, va_
     queue_try_add(&s_log_q, msg);
 }
 
-static void filter_init(nav_receiver_t model)
+static void filter_init(nav_antenna_t mode)
 {
     ins_init_t init;
     ins_options_t opt;
@@ -75,11 +75,14 @@ static void filter_init(nav_receiver_t model)
     init.acc_bias_pred_stddev_mps2_sqrts = APP_ACC_BIAS_RW;
 
     opt.auto_init = true;
-    opt.automotive_mode = model != NAV_RX_DUAL_ANTENNA;
+    /* Course yaw only with one antenna. In dual mode it adds nothing and
+     * pulls the wrong way when reversing (plans/gnss-um98x-config.md). */
+    opt.automotive_mode = mode != NAV_ANT_DUAL;
     opt.automotive_min_speed_mps = APP_AUTOMOTIVE_MIN_SPEED;
 
     nav_suite_init(&s_suite, &init, &opt);
     s_mag_model_set = false;
+    s_work.dual = mode == NAV_ANT_DUAL;
     s_work.n_reinit++;
 }
 
@@ -100,6 +103,14 @@ static void attach_gnss(ins_measurements_t *m, const nav_gnss_t *g)
     if (age_us >= (int64_t)INS_MAX_DELAY_MS * 1000) {
         s_work.n_gnss_late++;
         return;
+    }
+    if (g->yaw_valid) {
+        m->yaw.yaw_rad = g->yaw_rad;
+        m->yaw.stddev_rad = g->yaw_sd_rad;
+        m->yaw.is_valid = true;
+        m->yaw_delay_ms = (int)(age_us / 1000);
+        m->yaw_delay_us = (int32_t)(age_us % 1000);
+        s_work.n_yaw++;
     }
     if (!g->pos_valid && !g->vel_valid) {
         return;
@@ -169,30 +180,17 @@ static void core1_main(void)
 
     log_set_sink(log_sink);
 
-    /* The receiver model decides automotive_mode, so wait for it, but not
-     * for ever: the filter must also start when no receiver answers. */
-    absolute_time_t until = make_timeout_time_ms(APP_MODEL_WAIT_MS);
-    while (s_model == NAV_RX_UNKNOWN && !time_reached(until)) {
-        while (queue_try_remove(&s_imu_q, &imu)) { }
-        while (queue_try_remove(&s_gnss_q, &gnss)) { }
-        while (queue_try_remove(&s_baro_q, &baro)) { }
-        tight_loop_contents();
-    }
-
-    nav_receiver_t model = s_model;
-    filter_init(model);
+    /* The antenna mode is a setting known at boot, so the filter starts at
+     * once. It restarts only if the receiver can't do that mode. */
+    nav_antenna_t mode = s_mode;
+    filter_init(mode);
     uint64_t next_publish = time_us_64() + PUBLISH_PERIOD_US;
 
     for (;;) {
-        /* A filter started without a model runs with the single-antenna
-         * setting, so only a change to or from dual antenna restarts it. */
-        nav_receiver_t new_model = s_model;
-        if (new_model != model && new_model != NAV_RX_UNKNOWN) {
-            bool restart = (new_model == NAV_RX_DUAL_ANTENNA) != (model == NAV_RX_DUAL_ANTENNA);
-            model = new_model;
-            if (restart) {
-                filter_init(model);
-            }
+        nav_antenna_t new_mode = s_mode;
+        if (new_mode != mode) {
+            mode = new_mode;
+            filter_init(mode);
         }
 
         if (queue_try_remove(&s_imu_q, &imu)) {
@@ -255,8 +253,9 @@ static void core1_main(void)
 
 /* ---- Core 0 ------------------------------------------------------------ */
 
-void nav_start(void)
+void nav_start(nav_antenna_t mode)
 {
+    s_mode = mode;
     queue_init(&s_imu_q, sizeof(nav_imu_t), IMU_QUEUE_LEN);
     queue_init(&s_gnss_q, sizeof(nav_gnss_t), GNSS_QUEUE_LEN);
     queue_init(&s_baro_q, sizeof(nav_baro_t), BARO_QUEUE_LEN);
@@ -297,7 +296,7 @@ bool nav_push_imu(const nav_imu_t *s)
 bool nav_push_gnss(const nav_gnss_t *s) { return push(&s_gnss_q, s); }
 bool nav_push_baro(const nav_baro_t *s) { return push(&s_baro_q, s); }
 
-void nav_set_receiver_model(nav_receiver_t model) { s_model = model; }
+void nav_set_antenna_mode(nav_antenna_t mode) { s_mode = mode; }
 
 void nav_get_output(nav_output_t *out)
 {

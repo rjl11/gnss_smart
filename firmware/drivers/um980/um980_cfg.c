@@ -1,6 +1,7 @@
 /*
- * UM980 boot state machine: detect, identify, check, provision.
- * Follows plans/gnss-um98x-config.md. CONFIG RXTYPE is never sent.
+ * UM980 / UM982 boot state machine: detect, identify (and pick the antenna
+ * mode), check, provision. Follows plans/gnss-um98x-config.md. CONFIG RXTYPE
+ * is never sent.
  *
  * Reply formats that are not yet confirmed on a UM980 (the plan's open bench
  * questions) are matched loosely, and with cfg.verbose every reply line is
@@ -30,23 +31,42 @@ static const unsigned k_bauds[] = {
 };
 #define N_BAUDS (sizeof k_bauds / sizeof k_bauds[0])
 
-/* Target configuration, as it appears in the CONFIG reply after "CONFIG ". */
-static const char *const k_cfg_targets[] = {
-    "COM1 460800",
-    "COM2 460800",
-    "COM3 460800",
-    "PPS ENABLE GPS POSITIVE 100000 1000 0 0",
-    "SIGNALGROUP 2",
-    "PSRVELDRPOS DISABLE",
+/* Target configuration, as it appears in the CONFIG reply after "CONFIG ".
+ * The signal group and the heading mode depend on the antenna mode, so they
+ * are filled in by cfg_target(). */
+enum {
+    CFG_COM1 = 0,
+    CFG_COM2,
+    CFG_COM3,
+    CFG_PPS,
+    CFG_SIGNALGROUP,
+    CFG_PSRVELDRPOS,
+    CFG_HEADING,
+    CFG_COUNT
 };
-#define CFG_BIT_SIGNALGROUP     (1u << 4)
-#define CFG_BIT_PSRVELDRPOS     (1u << 5)
+static const char *const k_cfg_fixed[CFG_COUNT] = {
+    [CFG_COM1] = "COM1 460800",
+    [CFG_COM2] = "COM2 460800",
+    [CFG_COM3] = "COM3 460800",
+    [CFG_PPS] = "PPS ENABLE GPS POSITIVE 100000 1000 0 0",
+    [CFG_PSRVELDRPOS] = "PSRVELDRPOS DISABLE",
+    [CFG_HEADING] = "HEADING VARIABLELENGTH",
+};
+#define CFG_BIT(i)              (1u << (i))
 /* PSRVELDRPOS may not be listed by CONFIG (seen on a UM982), so its absence
  * is not a mismatch. The command is then sent again on entering RUN. */
-#define CFG_REQUIRED            0x1Fu
+#define CFG_REQUIRED_COMMON     (CFG_BIT(CFG_COM1) | CFG_BIT(CFG_COM2) | CFG_BIT(CFG_COM3) | \
+                                 CFG_BIT(CFG_PPS) | CFG_BIT(CFG_SIGNALGROUP))
+
+/* The heading modes of CONFIG HEADING (manual §4.18). Other HEADING lines
+ * (RELIABILITY, LENGTH, OFFSET) are not compared. */
+static const char *const k_heading_modes[] = {
+    "FIXLENGTH", "VARIABLELENGTH", "STATIC", "LOWDYNAMIC", "TRACTOR",
+};
 
 #define LOG_BIT_BESTNAV         (1u << 0)
 #define LOG_BIT_STADOP          (1u << 1)
+#define LOG_BIT_UNIHEADING      (1u << 2)
 
 /* Provisioning script. */
 typedef enum {
@@ -55,51 +75,102 @@ typedef enum {
     OP_WAIT,      /* wait ms                                                 */
     OP_BAUD,      /* switch UART1 to the baud in ms                          */
     OP_PROBE,     /* VERSIONB every second until answered; ms = time limit   */
-    OP_CHECK_SG,  /* CONFIG must show SIGNALGROUP 2                          */
+    OP_CHECK_SG,  /* CONFIG must show the mode's signal group                */
     OP_END
 } op_t;
 
+/* A NULL text on an OP_CMD_OPT step means the mode's signal-group command. */
 typedef struct {
     op_t        op;
     const char *text;
     uint32_t    ms;
+    bool        dual_only; /* skipped unless the effective mode is dual      */
 } script_step_t;
 
 static const script_step_t k_script[] = {
     /* 1. Back to factory state. FRESET puts every port at 115200. */
-    { OP_CMD_OPT,  "UNLOG",                                            1000 },
-    { OP_CMD_OPT,  "FRESET",                                           1000 },
-    { OP_BAUD,     NULL,                                             115200 },
-    { OP_WAIT,     NULL,                                              15000 },
-    { OP_PROBE,    NULL,                                              60000 },
+    { OP_CMD_OPT,  "UNLOG",                                            1000, false },
+    { OP_CMD_OPT,  "FRESET",                                           1000, false },
+    { OP_BAUD,     NULL,                                             115200, false },
+    { OP_WAIT,     NULL,                                              15000, false },
+    { OP_PROBE,    NULL,                                              60000, false },
     /* 2. Signal group first: it reboots the receiver if the value changes. */
-    { OP_CMD_OPT,  "CONFIG SIGNALGROUP 2",                             5000 },
-    { OP_WAIT,     NULL,                                              15000 },
-    { OP_PROBE,    NULL,                                              60000 },
-    { OP_CHECK_SG, NULL,                                                  0 },
+    { OP_CMD_OPT,  NULL,                                               5000, false },
+    { OP_WAIT,     NULL,                                              15000, false },
+    { OP_PROBE,    NULL,                                              60000, false },
+    { OP_CHECK_SG, NULL,                                                  0, false },
     /* 3. Settings. */
-    { OP_CMD,      "UNLOG COM1",                                       5000 },
-    { OP_CMD,      "UNLOG COM2",                                       5000 },
-    { OP_CMD,      "UNLOG COM3",                                       5000 },
-    { OP_CMD,      "MODE ROVER SURVEY",                                5000 },
-    { OP_CMD,      "CONFIG PSRVELDRPOS DISABLE",                       5000 },
-    { OP_CMD,      "CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0",   5000 },
+    { OP_CMD,      "UNLOG COM1",                                       5000, false },
+    { OP_CMD,      "UNLOG COM2",                                       5000, false },
+    { OP_CMD,      "UNLOG COM3",                                       5000, false },
+    { OP_CMD,      "MODE ROVER SURVEY",                                5000, false },
+    { OP_CMD,      "CONFIG PSRVELDRPOS DISABLE",                       5000, false },
+    { OP_CMD,      "CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0",   5000, false },
+    { OP_CMD,      "CONFIG HEADING VARIABLELENGTH",                    5000, true  },
     /* 4. Baud rates, our own port last. Its reply may come at either rate. */
-    { OP_CMD,      "CONFIG COM2 460800",                               5000 },
-    { OP_CMD,      "CONFIG COM3 460800",                               5000 },
-    { OP_CMD_OPT,  "CONFIG COM1 460800",                               1000 },
-    { OP_BAUD,     NULL,                                             460800 },
-    { OP_WAIT,     NULL,                                                100 },
-    { OP_PROBE,    NULL,                                              10000 },
+    { OP_CMD,      "CONFIG COM2 460800",                               5000, false },
+    { OP_CMD,      "CONFIG COM3 460800",                               5000, false },
+    { OP_CMD_OPT,  "CONFIG COM1 460800",                               1000, false },
+    { OP_BAUD,     NULL,                                             460800, false },
+    { OP_WAIT,     NULL,                                                100, false },
+    { OP_PROBE,    NULL,                                              10000, false },
     /* 5. Logs, then save. */
-    { OP_CMD,      "BESTNAVB COM1 0.05",                               5000 },
-    { OP_CMD,      "STADOPB COM1 1",                                   5000 },
-    { OP_CMD,      "SAVECONFIG",                                      10000 },
+    { OP_CMD,      "BESTNAVB COM1 0.05",                               5000, false },
+    { OP_CMD,      "STADOPB COM1 1",                                   5000, false },
+    { OP_CMD,      "UNIHEADINGB COM1 0.05",                            5000, true  },
+    { OP_CMD,      "SAVECONFIG",                                      10000, false },
     /* 6. Prove that it was saved: restart, then detect and check again. */
-    { OP_CMD_OPT,  "RESET",                                            1000 },
-    { OP_WAIT,     NULL,                                              15000 },
-    { OP_END,      NULL,                                                  0 },
+    { OP_CMD_OPT,  "RESET",                                            1000, false },
+    { OP_WAIT,     NULL,                                              15000, false },
+    { OP_END,      NULL,                                                  0, false },
 };
+
+/* The CONFIG reply text this mode needs for item i, or NULL if the item is
+ * not compared in this mode. */
+static const char *cfg_target(const um980_t *g, unsigned i)
+{
+    if (i == CFG_SIGNALGROUP) {
+        return g->sg_cmd != NULL ? g->sg_cmd + 7 : NULL; /* after "CONFIG " */
+    }
+    if (i == CFG_HEADING && !g->dual) {
+        return NULL;
+    }
+    return k_cfg_fixed[i];
+}
+
+static uint32_t cfg_required(const um980_t *g)
+{
+    return CFG_REQUIRED_COMMON | (g->dual ? CFG_BIT(CFG_HEADING) : 0u);
+}
+
+/* Combines the antenna-mode setting with the receiver found
+ * (plans/gnss-um98x-config.md, "Antenna mode" and "Target configuration").
+ * Returns false for a receiver this driver can't configure. */
+static bool select_mode(um980_t *g)
+{
+    if (g->model == UM980_PRODUCT_UM980 && g->build >= UM980_MIN_BUILD) {
+        g->dual = false;
+        g->dual_refused = g->cfg.dual_antenna;
+        g->sg_cmd = "CONFIG SIGNALGROUP 2";
+        return true;
+    }
+    if (g->model == UM980_PRODUCT_UM982 && g->build >= UM982_MIN_BUILD) {
+        g->dual = g->cfg.dual_antenna;
+        g->dual_refused = false;
+        if (!g->dual) {
+            g->sg_cmd = "CONFIG SIGNALGROUP 2 0"; /* slave antenna off */
+        } else if (g->build >= UM982_SG36_MIN_BUILD) {
+            g->sg_cmd = "CONFIG SIGNALGROUP 3 6";
+        } else {
+            g->sg_cmd = "CONFIG SIGNALGROUP 4 5";
+        }
+        return true;
+    }
+    g->dual = false;
+    g->dual_refused = false;
+    g->sg_cmd = NULL;
+    return false;
+}
 
 #define LOG(g, ...) do { if ((g)->cfg.verbose) { printf("[um980] " __VA_ARGS__); printf("\n"); } } while (0)
 
@@ -121,20 +192,37 @@ static void on_config_line(um980_t *g, const char *line)
     if (starts_with(p, "CONFIG ")) {
         p += 7;
     }
-    for (unsigned i = 0; i < sizeof k_cfg_targets / sizeof k_cfg_targets[0]; i++) {
-        const char *target = k_cfg_targets[i];
+    if (starts_with(p, "HEADING ")) {
+        bool is_mode = false;
+        for (unsigned k = 0; k < sizeof k_heading_modes / sizeof k_heading_modes[0]; k++) {
+            if (starts_with(p + 8, k_heading_modes[k])) {
+                is_mode = true;
+            }
+        }
+        if (!is_mode) {
+            return; /* RELIABILITY, LENGTH, OFFSET: not part of the target */
+        }
+    }
+    for (unsigned i = 0; i < CFG_COUNT; i++) {
+        const char *target = cfg_target(g, i);
+        if (target == NULL) {
+            continue;
+        }
         size_t key_len = (size_t)(strchr(target, ' ') - target) + 1u; /* "COM1 " */
         if (strncmp(p, target, key_len) != 0) {
             continue;
         }
         size_t n = strlen(target);
-        if (strncmp(p, target, n) == 0 && (p[n] == '\0' || p[n] == '*' || p[n] == ' ')) {
-            g->cfg_seen |= 1u << i;
+        /* A signal group must match in full: "SIGNALGROUP 3 6" is not
+         * "SIGNALGROUP 3". */
+        bool end_ok = p[n] == '\0' || p[n] == '*' || (p[n] == ' ' && i != CFG_SIGNALGROUP);
+        if (strncmp(p, target, n) == 0 && end_ok) {
+            g->cfg_seen |= CFG_BIT(i);
         } else {
             g->cfg_bad = true;
             LOG(g, "config differs: \"%s\", want \"%s\"", p, target);
         }
-        if ((1u << i) == CFG_BIT_PSRVELDRPOS) {
+        if (i == CFG_PSRVELDRPOS) {
             g->psrvel_listed = true;
         }
     }
@@ -172,6 +260,9 @@ static void on_loglist_line(um980_t *g, const char *line)
     } else if (strcmp(tok[0], "STADOPB") == 0 && strcmp(tok[1], "COM1") == 0 &&
                period > 0.99f && period < 1.01f) {
         g->log_seen |= LOG_BIT_STADOP;
+    } else if (g->dual && strcmp(tok[0], "UNIHEADINGB") == 0 && strcmp(tok[1], "COM1") == 0 &&
+               period > 0.049f && period < 0.051f) {
+        g->log_seen |= LOG_BIT_UNIHEADING;
     } else {
         g->log_bad = true;
         LOG(g, "unexpected log: \"%s\"", line);
@@ -351,12 +442,15 @@ static void reset_check(um980_t *g)
 
 static bool check_passed(um980_t *g)
 {
-    bool cfg_ok = (g->cfg_seen & CFG_REQUIRED) == CFG_REQUIRED && !g->cfg_bad;
-    bool logs_ok = g->log_count == 2 && g->log_lines == 2 && !g->log_bad &&
-                   g->log_seen == (LOG_BIT_BESTNAV | LOG_BIT_STADOP);
+    uint32_t need = cfg_required(g);
+    uint32_t want_logs = LOG_BIT_BESTNAV | LOG_BIT_STADOP | (g->dual ? LOG_BIT_UNIHEADING : 0u);
+    int n_logs = g->dual ? 3 : 2;
+    bool cfg_ok = (g->cfg_seen & need) == need && !g->cfg_bad;
+    bool logs_ok = g->log_count == n_logs && g->log_lines == n_logs && !g->log_bad &&
+                   g->log_seen == want_logs;
     if (!cfg_ok) {
-        LOG(g, "check: CONFIG differs (items seen 0x%02lx, want 0x%02x)",
-            (unsigned long)g->cfg_seen, CFG_REQUIRED);
+        LOG(g, "check: CONFIG differs (items seen 0x%02lx, want 0x%02lx)",
+            (unsigned long)g->cfg_seen, (unsigned long)need);
     }
     if (!g->mode_ok) {
         LOG(g, "check: MODE is not ROVER SURVEY");
@@ -379,6 +473,11 @@ static void provision_step(um980_t *g, uint64_t now)
     const script_step_t *s = &k_script[g->script_pc];
     int r;
 
+    if (s->dual_only && !g->dual) {
+        next_script_step(g);
+        return;
+    }
+
     switch (s->op) {
     case OP_CMD:
         r = cmd_step(g, now, s->text, s->ms, CMD_RETRIES);
@@ -391,7 +490,7 @@ static void provision_step(um980_t *g, uint64_t now)
         break;
 
     case OP_CMD_OPT:
-        if (cmd_step(g, now, s->text, s->ms, 1) != 0) {
+        if (cmd_step(g, now, s->text != NULL ? s->text : g->sg_cmd, s->ms, 1) != 0) {
             next_script_step(g);
         }
         break;
@@ -430,7 +529,7 @@ static void provision_step(um980_t *g, uint64_t now)
         }
         r = query_step(g, now, "CONFIG");
         if (r != 0) {
-            if (r > 0 && (g->cfg_seen & CFG_BIT_SIGNALGROUP) != 0) {
+            if (r > 0 && (g->cfg_seen & CFG_BIT(CFG_SIGNALGROUP)) != 0) {
                 next_script_step(g);
             } else {
                 provision_failed(g, now, UM980_E_SIGNALGROUP);
@@ -470,10 +569,17 @@ void um980_cfg_step(um980_t *g, uint64_t now)
         } else if (g->got_version) {
             LOG(g, "found at %u baud: product %d, %s, %s", g->baud, g->model, g->sw_version,
                 g->serial);
-            if (g->model != UM980_PRODUCT_UM980 || g->build < UM980_MIN_BUILD) {
-                /* The UM982 is recognised, but this build only has the
-                 * UM980 target table (plans/gnss-um98x-config.md).
-                 * Nothing is written to it: it is used as it is. */
+            if (select_mode(g)) {
+                LOG(g, "%s, %s antenna, target %s",
+                    g->model == UM980_PRODUCT_UM982 ? "UM982" : "UM980",
+                    g->dual ? "dual" : "single", g->sg_cmd);
+                if (g->dual_refused) {
+                    LOG(g, "warning: dual antenna is set, but a UM980 is fitted: using single");
+                }
+            }
+            if (g->sg_cmd == NULL) {
+                /* Not a receiver this driver knows: nothing is written to
+                 * it, it is used as it is. */
                 g->last_error = UM980_E_UNSUPPORTED;
                 LOG(g, "error: %s, running with the receiver as it is",
                     um980_strerror(UM980_E_UNSUPPORTED));
@@ -580,5 +686,11 @@ void um980_reconfigure(um980_t *g)
 {
     g->provision_attempts = 0;
     g->degraded = false;
+    if (g->sg_cmd == NULL) {
+        /* Not identified yet: the target table is unknown. Detection
+         * provisions the receiver if its settings differ. */
+        enter_detect(g, time_us_64(), 0);
+        return;
+    }
     enter_provision(g, time_us_64());
 }

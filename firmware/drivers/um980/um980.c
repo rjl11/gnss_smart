@@ -1,7 +1,8 @@
 /*
- * UM980 driver: receive framer, binary log decoding and PPS time-tagging.
- * Message layouts are from the Unicore N4 commands manual (docs/), sections
- * 7.5.1 (header), 7.5.2 (VERSION), 7.5.21 (BESTNAV) and 7.5.96 (STADOP).
+ * UM980 / UM982 driver: receive framer, binary log decoding and PPS
+ * time-tagging. Message layouts are from the Unicore N4 commands manual
+ * (docs/), sections 7.5.1 (header), 7.5.2 (VERSION), 7.5.21 (BESTNAV),
+ * 7.5.96 (STADOP) and 7.5.99 (UNIHEADING).
  */
 #include "um980.h"
 
@@ -25,6 +26,7 @@
 #define VERSION_MIN_LEN     (4u + 33u + 129u + 66u)
 #define STADOP_MIN_LEN      40u
 #define BESTNAV_MIN_LEN     120u
+#define UNIHEADING_MIN_LEN  44u
 
 #define MODE_IDLE           0
 #define MODE_BINARY         1
@@ -120,33 +122,33 @@ static uint32_t pps_read(uint64_t *t_us)
 
 /* The PPS edge marks a whole GPS second. The frame's time of week says how
  * far after that second the epoch is valid. */
-static void time_tag(um980_nav_t *n)
+static void time_tag(uint64_t t_arrival_us, uint32_t tow_ms, uint64_t *t_valid_us, bool *from_pps)
 {
     uint64_t t_pps;
 
-    n->t_valid_us = n->t_arrival_us;
-    n->t_from_pps = false;
+    *t_valid_us = t_arrival_us;
+    *from_pps = false;
 
     if (s_pps_pin < 0 || pps_read(&t_pps) == 0) {
         return;
     }
-    int64_t since_pps_us = (int64_t)n->t_arrival_us - (int64_t)t_pps;
+    int64_t since_pps_us = (int64_t)t_arrival_us - (int64_t)t_pps;
     if (since_pps_us < 0 || since_pps_us > PPS_MAX_AGE_US) {
         return;
     }
     /* tow - (arrival - pps) is the PPS second minus the output latency, so
      * rounding to the nearest second gives the PPS second for a latency
      * below 500 ms. */
-    int64_t est_ms = (int64_t)n->tow_ms - since_pps_us / 1000;
+    int64_t est_ms = (int64_t)tow_ms - since_pps_us / 1000;
     int64_t q = est_ms + 500;
     int64_t pps_tow_ms = q - (((q % 1000) + 1000) % 1000); /* floor to a second */
-    int64_t t_valid = (int64_t)t_pps + ((int64_t)n->tow_ms - pps_tow_ms) * 1000;
-    int64_t latency = (int64_t)n->t_arrival_us - t_valid;
+    int64_t t_valid = (int64_t)t_pps + ((int64_t)tow_ms - pps_tow_ms) * 1000;
+    int64_t latency = (int64_t)t_arrival_us - t_valid;
     if (latency < 0 || latency > NAV_MAX_LATENCY_US) {
         return;
     }
-    n->t_valid_us = (uint64_t)t_valid;
-    n->t_from_pps = true;
+    *t_valid_us = (uint64_t)t_valid;
+    *from_pps = true;
 }
 
 /* ---- Frames ------------------------------------------------------------ */
@@ -210,7 +212,40 @@ static void decode_bestnav(um980_t *g, const uint8_t *p, um980_nav_t *n)
                     isfinite(n->vert_speed_mps) && sigma_ok(n->sd_hor_speed_mps) &&
                     sigma_ok(n->sd_vert_speed_mps);
 
-    time_tag(n);
+    time_tag(n->t_arrival_us, n->tow_ms, &n->t_valid_us, &n->t_from_pps);
+}
+
+/* Fixed-ambiguity baseline only. The INS types (52 and up) are left out, so
+ * a heading from the receiver's own INS is never used. */
+static bool is_fixed_heading_type(uint32_t type)
+{
+    return type == UM980_TYPE_L1_INT || type == UM980_TYPE_WIDE_INT ||
+           type == UM980_TYPE_NARROW_INT;
+}
+
+static void decode_uniheading(um980_t *g, const uint8_t *p, um980_heading_t *h)
+{
+    memset(h, 0, sizeof *h);
+    h->t_arrival_us = g->port->rx_snap_us;
+    h->week = rd_u16(&g->rx[OFS_WEEK]);
+    h->tow_ms = rd_u32(&g->rx[OFS_TOW_MS]);
+
+    h->sol_status = rd_u32(p + 0);
+    h->pos_type = rd_u32(p + 4);
+    h->length_m = rd_f32(p + 8);
+    h->heading_deg = rd_f32(p + 12);
+    h->pitch_deg = rd_f32(p + 16);
+    h->sd_heading_deg = rd_f32(p + 24);
+    h->sd_pitch_deg = rd_f32(p + 28);
+    h->n_tracked = p[36];
+    h->n_used = p[37];
+
+    h->fixed = h->sol_status == UM980_SOL_COMPUTED && is_fixed_heading_type(h->pos_type) &&
+               h->n_used > 0 && isfinite(h->length_m) && h->length_m > 0.0f &&
+               isfinite(h->heading_deg) && h->heading_deg >= 0.0f && h->heading_deg <= 360.0f &&
+               sigma_ok(h->sd_heading_deg);
+
+    time_tag(h->t_arrival_us, h->tow_ms, &h->t_valid_us, &h->t_from_pps);
 }
 
 /* Returns true when *out was filled with a BESTNAV epoch. */
@@ -239,6 +274,16 @@ static bool handle_frame(um980_t *g, um980_nav_t *out)
             g->stats.pdop = rd_f32(p + 8);
             g->stats.hdop = rd_f32(p + 20);
             g->stats.dop_valid = true;
+        }
+        break;
+
+    case UM980_MSG_UNIHEADING:
+        if (len >= UNIHEADING_MIN_LEN) {
+            g->stats.hdg_epochs++;
+            if (g->state == UM980_ST_RUN && g->dual) {
+                decode_uniheading(g, p, &g->hdg);
+                g->hdg_new = true;
+            }
         }
         break;
 
@@ -353,6 +398,16 @@ bool um980_send_line(um980_t *g, const char *line)
     return uart_dma_write(g->port, b, (size_t)n);
 }
 
+bool um980_take_heading(um980_t *g, um980_heading_t *out)
+{
+    if (!g->hdg_new) {
+        return false;
+    }
+    *out = g->hdg;
+    g->hdg_new = false;
+    return true;
+}
+
 bool um980_poll(um980_t *g, um980_nav_t *out)
 {
     uart_dma_poll(g->port);
@@ -400,7 +455,7 @@ const char *um980_strerror(int err)
     case UM980_E_UNSUPPORTED: return "unsupported receiver or firmware";
     case UM980_E_COMMAND:     return "command rejected or not answered";
     case UM980_E_NO_REBOOT:   return "no answer after a restart";
-    case UM980_E_SIGNALGROUP: return "CONFIG does not show SIGNALGROUP 2";
+    case UM980_E_SIGNALGROUP: return "CONFIG does not show the target signal group";
     case UM980_E_NOT_SAVED:   return "configuration check failed after SAVECONFIG and RESET";
     case UM980_E_RATE:        return "BESTNAVB is not at 20 Hz";
     default:                  return "unknown error";

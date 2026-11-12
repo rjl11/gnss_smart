@@ -35,9 +35,31 @@
  * (GNSS course) or the free-running ARS. */
 #define APP_FEED_MAG                0
 
-/* Core 1 waits this long for the receiver model before it starts the filter
- * with the UM980 setting (start value, not yet measured). */
-#define APP_MODEL_WAIT_MS           10000
+/* GNSS antenna mode (plans/gnss-um98x-config.md, "Antenna mode").
+ * Single: UM980, or UM982 with the slave antenna off; yaw from the GNSS
+ * course over ground. Dual: UM982 with both antennas; yaw from its heading.
+ * Dual with a UM980 fitted falls back to single. Set it at build time with
+ * cmake -DGNSS_ANTENNA_MODE=dual. The web page will override it from flash
+ * once it exists; until then this default is the setting. */
+#define APP_ANTENNA_SINGLE          0
+#define APP_ANTENNA_DUAL            1
+#ifndef APP_GNSS_ANTENNA_MODE
+#define APP_GNSS_ANTENNA_MODE       APP_ANTENNA_SINGLE
+#endif
+
+/* Dual antenna only. Direction of the ANT1 -> ANT2 baseline in the body
+ * frame, clockwise from the body x-axis (forward) [deg]. Across the cab,
+ * left to right, is +90. Measure on the vehicle. */
+#define APP_BASELINE_YAW_DEG        90.0f
+
+/* Dual antenna only. A heading epoch is dropped when its baseline length
+ * differs from the running median by more than this (start value, tune on
+ * the bench). */
+#define APP_BASELINE_GATE_M         0.05f
+
+/* Dual antenna only. Floor on the heading sigma, for a 1 m baseline; it
+ * scales with 1 / length (datasheet: 0.1 deg RMS at 1 m). */
+#define APP_HEADING_SD_FLOOR_DEG_1M 0.1f
 
 /* A barometer sample older than this when it reaches the filter is dropped
  * (start value, not yet measured). */
