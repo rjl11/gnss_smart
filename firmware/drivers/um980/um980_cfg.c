@@ -157,9 +157,10 @@ static bool select_mode(um980_t *g)
     if (g->model == UM980_PRODUCT_UM982 && g->build >= UM982_MIN_BUILD) {
         g->dual = g->cfg.dual_antenna;
         g->dual_refused = false;
-        if (!g->dual) {
-            g->sg_cmd = "CONFIG SIGNALGROUP 2 0"; /* slave antenna off */
-        } else if (g->build >= UM982_SG36_MIN_BUILD) {
+        /* Single mode uses the dual group too and leaves the heading unused:
+         * the UM982 refuses "2 0" (bench results 2026-11-12). It accepts
+         * only 3 6, 4 5, 5 0 and 7 0. */
+        if (g->build >= UM982_SG36_MIN_BUILD) {
             g->sg_cmd = "CONFIG SIGNALGROUP 3 6";
         } else {
             g->sg_cmd = "CONFIG SIGNALGROUP 4 5";

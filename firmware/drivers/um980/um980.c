@@ -2,7 +2,7 @@
  * UM980 / UM982 driver: receive framer, binary log decoding and PPS
  * time-tagging. Message layouts are from the Unicore N4 commands manual
  * (docs/), sections 7.5.1 (header), 7.5.2 (VERSION), 7.5.21 (BESTNAV),
- * 7.5.96 (STADOP) and 7.5.99 (UNIHEADING).
+ * 7.5.98 (STADOP) and 7.5.101 (UNIHEADING) (R1.16).
  */
 #include "um980.h"
 

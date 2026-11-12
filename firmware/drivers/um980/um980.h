@@ -52,7 +52,8 @@ extern "C" {
 #define UM980_MSG_UNIHEADING     972
 #define UM980_MSG_BESTNAV        2118
 
-/* Solution status and position/velocity types (manual, tables 7-172, 7-173). */
+/* Solution status and position/velocity types (manual R1.16, tables 7-175,
+ * 7-176). */
 #define UM980_SOL_COMPUTED       0
 #define UM980_TYPE_NONE          0
 #define UM980_TYPE_SINGLE        16
@@ -81,7 +82,7 @@ typedef struct {
     bool verbose;          /* print state changes and replies with printf   */
 } um980_config_t;
 
-/* One UNIHEADING epoch (UM982 in dual-antenna mode, manual §7.5.99). */
+/* One UNIHEADING epoch (UM982 in dual-antenna mode, manual R1.16 §7.5.101). */
 typedef struct {
     uint64_t t_arrival_us;
     uint64_t t_valid_us;   /* Pico time of validity (PPS), else = arrival   */

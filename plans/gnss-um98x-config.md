@@ -21,9 +21,10 @@ Decisions fixed by the user:
 - **Dual-antenna heading mode is `CONFIG HEADING VARIABLELENGTH`**: the receiver does not hold the baseline length fixed.
 
 Sources:
-- `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.15.pdf`. Section numbers below refer to it.
-- `docs/datasheets/UM980_Datasheet.pdf`.
+- `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.16.pdf` (Oct. 2026). Section numbers below refer to it. Against R1.15 (`…_R1.15.pdf`, Jun. 2026), nothing this plan uses changed: the UNIHEADING, HWSTATUS, BESTNAV, PSRVELDRPOS and PPS sections and the position-type values read the same. Three log sections moved: STADOP §7.5.96 → §7.5.98, UNIHEADING §7.5.99 → §7.5.101, and UNILOGLIST §7.5.101 → §7.5.103.
+- `docs/datasheets/UM980_Datasheet.pdf` and `docs/datasheets/UM980_User Manual_EN_R1.10.pdf` (UM980 hardware manual R1.10, 2026-06). Section and table numbers marked "UM980 HW" refer to the manual.
 - `docs/datasheets/um982-user-manual-en-r1-1.pdf` (UM982 hardware manual R1.1, 2022-09). Section and table numbers marked "HW" refer to it.
+- `docs/UM982_Product_Brief_En_mail.pdf` (UM982 product brief) and `docs/PRECISION PRODUCTS LIST 2026_En.pdf` (Unicore's 2026 product list). Marketing sheets: used only where they agree with or update the manuals.
 
 Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) (RTCM source, NMEA out), [inslib-nav-suite.md](inslib-nav-suite.md) (what the logs feed), [web-config-server.md](web-config-server.md) (antenna-mode setting, status and the "Reconfigure GNSS" action), [gnss-mosaic-x5-vs-um980.md](gnss-mosaic-x5-vs-um980.md) (alternative receiver).
 
@@ -33,10 +34,12 @@ Related: [rp2350-feasibility.md](rp2350-feasibility.md) (port layout), [rtcm-ove
 | `VERSIONB` product type (§7.5.2) | 18 | 17 |
 | Minimum build (`MODE ROVER`, §3.4) | 7923 | 7650 |
 | Antennas | 1 | 2: ANT1 (master), ANT2 (slave) |
-| Signal groups (§4.48) | 1, 2, 8, 10; one parameter only | two parameters (master, slave): default `4 5`, also `3 6`; slave `0` = slave off |
-| Max output rate | 50 Hz on SG 8 only; 20 Hz standard | 20 Hz (HW Table 1-1); no 50 Hz option |
+| Signal groups (§4.48) | 1, 2, 8, 10; one parameter only | two parameters (master, slave): `4 5` (default), `3 6`, `5 0`, `7 0`. Our build 18975 accepts exactly these (bench results 2026-11-12) |
+| Max output rate | 50 Hz on SG 8 only (UM980 HW Table 1-1: "supports 50 Hz in specific mode"); 20 Hz standard | 20 Hz RTK + heading (HW Table 1-1, product brief); no 50 Hz option |
 | GNSS heading | no | yes, on by default (§1.3) |
-| Power (bare part) | 480 mW typical | 180 mA typical, **300 mA maximum** at 3.3 V, 600 mW (HW Table 2-4) |
+| Cold start (TTFF) | < 12 s (UM980 HW Table 1-1) | < 30 s (product brief) |
+| Power (bare part, 3.3 V) | 145 mA typical, **180 mA maximum**, 480 mW (UM980 HW Table 2-3) | 180 mA typical, **300 mA maximum**, 600 mW (HW Table 2-4) |
+| UART logic | LVTTL at VCC (3.0–3.6 V): in high ≥ 0.7 VCC, out high ≥ VCC − 0.45 V at 2 mA (UM980 HW Table 2-4) | LVTTL (product brief) |
 
 This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs nothing here.
 
@@ -57,14 +60,14 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
 ## Hardware
 - **Ready-made modules, same connections.** Both receivers come on ready-made modules, not bare LGA parts. Each module exposes a USB-C port that is **COM3** (for a PC, through a CH340 bridge), COM1 RX/TX and COM2 RX/TX on pins, PPS, 5 V and GND. The mapping was found on the UM982 module (bench results below) and is assumed for the UM980 module; check it once. The Pico's UART1 goes to the COM1 pins. The wiring is identical for both, so swapping receivers is a plug change, not a board change. The UM982 module adds the ANT2 connector.
   - The bare UM982 (48-pin LGA) is not pin-compatible with the bare UM980 (54-pin LGA) (HW Table 1-1, §2.1), but the modules hide that. The pin-level rules in HW §3 (V_BCKP, BIF pull-ups, antenna feed, power-on ramp) are the module maker's job.
-  - The modules have no RESET_N pin, so the firmware can't hard-reset a stuck receiver. It uses `RESET` over COM1, and power-cycling the 5 V would need a load switch (open question).
+  - The modules have no RESET_N pin, so the firmware can't hard-reset a stuck receiver. It uses `RESET` over COM1, and power-cycling the 5 V would need a load switch (open question). If one is added, the bare part needs its supply below 0.4 V for **more than 500 ms** before the next power-on, with a monotonic ramp (UM980 HW §3.3). The module's own regulator and capacitors may stretch that, so measure the off time at the module's 3.3 V rail.
 - **Power:** the module takes 5 V. The UM982's 600 mW figure is for 10 Hz PVT + 10 Hz RTK + 10 Hz heading, so at 20 Hz expect more. The module's regulator and the active antennas add to that, so measure the 5 V current of each module (estimate, not yet measured).
-- **Logic level:** check on the bench that the module's COM1 TX and PPS swing 3.3 V, not 5 V, before wiring them to Pico GPIO.
+- **Logic level:** both bare parts have LVTTL UARTs at their 3.3 V supply (receivers table), which matches the Pico's 3.3 V GPIO. The module can still level-shift or buffer them, so check on the bench that the module's COM1 TX and PPS swing 3.3 V, not 5 V, before wiring them to Pico GPIO.
 - **Antennas (dual mode):** ANT1 (master) and ANT2 (slave), both roof-mounted with a clear sky view.
   - A longer baseline gives a more accurate heading. The receiver doesn't fix the length (VARIABLELENGTH), but the mount must still be rigid. See "VARIABLELENGTH and the mount" below.
   - Record the baseline direction in the body frame (`baseline_yaw_b`, ANT1 → ANT2, measured from the body x-axis). Mounted across the cab (left → right), `baseline_yaw_b` is +90°.
   - `gnss_leverarm_b` in `ins_measurements_t` is ANT1's in every mode, because BESTNAV is the master antenna position.
-  - ANT2 tracks fewer signals than ANT1: BDS B1I/B2I/B3I, GPS L1 C/A/L2C, GLONASS L1/L2, Galileo E1/E5b, QZSS L1/L2 (HW Table 1-1). It has no L5/E5a. That matters for heading only; position comes from ANT1.
+  - ANT2 tracks fewer signals than ANT1. The HW manual (Table 1-1, 2022) lists BDS B1I/B2I/B3I, GPS L1 C/A/L2C, GLONASS L1/L2, Galileo E1/E5b, QZSS L1/L2. The newer product brief lists GPS L1C/A, L2C; BDS B1I, B3I (no B2I); GLONASS G1, G2; Galileo E1, E5b; QZSS L1C/A, L1C/B, L2C. Either way ANT2 has no L5/E5a. That matters for heading only; position comes from ANT1.
 
 ## Facts from the manual
 - **`FRESET`** clears the saved configuration, ephemerides and position, sets all ports to 115200 and restarts the receiver (§8.1).
@@ -73,16 +76,16 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - The first parameter is the master antenna's group, the second the slave's. **`0` disables the slave antenna** (Table 4-60). On a dual-antenna product an omitted second parameter is set to 0. A single-antenna product rejects a second parameter with an error.
   - UM980 SG 2 covers GPS L1C/A L1C L2C L2P L5, BDS B1I B3I B1C B2a B2b, GLO G1 G2 G3, GAL E1 E5a E5b E6, QZSS L1C/A L1C L2C L5 L1S, NavIC L5 and SBAS.
   - On the UM980 only SG 8 is documented for 50 Hz. 20 Hz is a standard output rate (§7, parameter `0.05`), but check on the bench that SG 2 really delivers it.
-  - Table 4-61 lists only `4 5` (default) and `3 6` for the UM982. With **SG 3 6**, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests". `2 0`, the user's choice for UM982 single mode, isn't in the table, and the UM982 refuses it. Build 18975 accepts exactly `3 6`, `4 5`, `5 0` and `7 0` (bench results 2026-11-12).
+  - Table 4-61 lists only `4 5` (default) and `3 6` in its UM982 row. R1.16 adds a UMD982 row with `4 5`, `3 6`, `5 0` and `7 0`, the same four values our UM982 accepts. With **SG 3 6**, 20 Hz positioning needs build ≥ 10979, and then only "under specific log requests". `2 0`, the user's choice for UM982 single mode, isn't in the table, and the UM982 refuses it. Build 18975 accepts exactly `3 6`, `4 5`, `5 0` and `7 0` (bench results 2026-11-12).
   - The manual says an omitted second parameter becomes 0 on a dual-antenna product. On the UM982 that holds only for `5` and `7`, where `x 0` is valid anyway. Every other master-only form gets a grammar error, `4` included. Always send both parameters.
 - **RTCM on the command port:**
   - In rover mode the receiver identifies RTCM input by itself (§3.1).
-  - The default port type is `RXTYPE AUTO` (§4.3), so COM1 accepts commands and RTCM together.
+  - The default port type is `RXTYPE AUTO` (§4.3), so COM1 accepts commands and RTCM together. R1.16 lists `CONFIG RXTYPE` for the UM980 as well as the UM982. That changes nothing here: it is still never sent.
   - `FRESET` returns a used receiver that has a locked port to AUTO.
 - **Command checksum:** `CONFIG CMDFORMAT` isn't listed for the UM980 (§4.12), but the UM982 lists `CONFIG CMDFORMAT 0` (bench results). Leave it at 0: commands are plain ASCII ending in CRLF.
 - **Read-only checks:**
   - `CONFIG` with no argument returns one `$CONFIG,<item>,<command>*cs` line per setting (§4.1).
-  - `UNILOGLIST` lists the active logs (§7.5.101).
+  - `UNILOGLIST` lists the active logs (§7.5.103).
 - **`VERSIONB`** (msg ID 37) gives the product type, firmware build and serial number (§7.5.2). `MODE ROVER SURVEY` needs UM980 build ≥ 7923 or UM982 build ≥ 7650 (§3.4).
 - **`SAVECONFIG`** saves the logs (except ONCE logs) and the port settings (§8.3).
 - **Doppler position prediction** is on by default (§4.34). When pseudoranges are poor, the receiver then reports a predicted position as a fix with 0 satellites. For INSLIB that is a fake measurement, so turn it off.
@@ -98,10 +101,10 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
   - **`CONFIG HEADING OFFSET <heading> <pitch>`** (§4.19) adds an offset to the HEADING, GPTHS and HEADING2 outputs. The default is 0.
   - **`CONFIG SMOOTH HEADING <epochs>`** (§4.49) works on dual-antenna products only. It is not used, because the filter does its own smoothing and smoothing adds lag.
   - **`RESET`** (§8.2) has `RTK2` (slave antenna RTK) and `HEADING` options to restart the heading solution.
-  - **`UNIHEADINGB`** (message ID 972, §7.5.99) contains the solution status and position type, the baseline length [m], heading 0–360° and pitch ±90°, heading σ and pitch σ [deg], the base station ID and satellite counts. The note under the table: if the receiver's own INS is enabled, `pos type` can be `INS`, and then the heading comes from the INS, not from the antennas.
+  - **`UNIHEADINGB`** (message ID 972, §7.5.101) contains the solution status and position type, the baseline length [m], heading 0–360° and pitch ±90°, heading σ and pitch σ [deg], the base station ID and satellite counts. The note under the table: if the receiver's own INS is enabled, `pos type` can be `INS`, and then the heading comes from the INS, not from the antennas.
   - **`HEADINGSTATUSB`** (ID 521, §7.5.43) echoes the `CONFIG HEADING LENGTH` setting. It isn't needed in "Run".
   - `BESTNAV` refers to the master antenna (ANT1); the slave antenna's position is in a separate log, `BESTNAVH` (§7.5.20).
-  - Heading accuracy is **0.1° RMS for a 1 m baseline** (HW Table 1-1). It scales roughly with 1/baseline, so a 2 m bar gives about 0.05° (estimate, not yet measured). RTK accuracy is the same as the UM980: 0.8 cm + 1 ppm H, 1.5 cm + 1 ppm V.
+  - Heading accuracy is **0.1° RMS for a 1 m baseline** (HW Table 1-1, and the product brief). It scales roughly with 1/baseline, so a 2 m bar gives about 0.05° (estimate, not yet measured). RTK accuracy is the same as the UM980: 0.8 cm + 1 ppm H, 1.5 cm + 1 ppm V.
 
 ## Target configuration
 | Item | UM980 single | UM982 single | UM982 dual | Why |
@@ -118,8 +121,8 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
 
 Logs:
 - **BESTNAVB at 20 Hz** (§7.5.21) is the INSLIB input: position, velocity, per-axis σ, differential age, satellite counts and solution type.
-- **STADOPB at 1 Hz** (§7.5.96) gives the HDOP for GGA.
-- **UNIHEADINGB at 20 Hz** (§7.5.99), dual mode only: the heading for `m.yaw` (see "Dual-antenna heading" below).
+- **STADOPB at 1 Hz** (§7.5.98) gives the HDOP for GGA.
+- **UNIHEADINGB at 20 Hz** (§7.5.101), dual mode only: the heading for `m.yaw` (see "Dual-antenna heading" below).
 - **HWSTATUSB at 1 Hz** (§7.5.44) is for diagnostics only; nothing from it goes to INSLIB. It gives the receiver temperature (unconfirmed field), the three core supply voltages, the clock-drift flag and PLL_LOCK.
   - **Parser rule:** read field 2 as a signed integer in thousandths of a °C. Accept −40 000 to 125 000 (−40 to 125 °C); outside that, report "not reported". Until the bench check below confirms the field, the diagnostics page labels it "temperature (unconfirmed)".
   - Flag DC09, DC10 or DC18 outside the manual's normal range on the diagnostics page.
@@ -224,7 +227,7 @@ Everything here runs on core 0 ([rtos-decision.md](rtos-decision.md)): detection
 ## Firmware status
 Done in the first demo (`firmware/`, built, not yet run on hardware):
 - `APP_GNSS_ANTENNA_MODE` in `firmware/app/app_config.h`, set from CMake with `-DGNSS_ANTENNA_MODE=single|dual` (default single).
-- `firmware/drivers/um980/um980_cfg.c`: Identify accepts both receivers and picks the effective mode, the signal-group command and the target items; provisioning and the fast-path check follow the mode (`HEADING VARIABLELENGTH` and UNIHEADINGB only in dual).
+- `firmware/drivers/um980/um980_cfg.c`: Identify accepts both receivers and picks the effective mode, the signal-group command and the target items; provisioning and the fast-path check follow the mode (`HEADING VARIABLELENGTH` and UNIHEADINGB only in dual). UM982 single uses the dual group (`3 6`, or `4 5` below build 10979), as in the target table.
 - `firmware/drivers/um980/um980.c` decodes UNIHEADINGB; `firmware/app/main.c` applies the fixed-type check, the baseline-length median gate, `baseline_yaw_b` (`APP_BASELINE_YAW_DEG`) and the σ floor, and sends the heading to core 1 as its own queue item with its own time of validity and delay. Core 1 fills `m.yaw` from it.
 - `firmware/app/nav_core1.c` starts the filter at once from the setting and re-initialises only in the mismatch case. `APP_MODEL_WAIT_MS` is gone.
 
