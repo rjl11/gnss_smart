@@ -53,7 +53,7 @@ Pitfalls:
 - **Heading and roll are plain degrees**, not the ×10 integers of `$PANDA`.
 - **Number formats that are known to work** (the AgOpenWeb-HAT daemon's `$PAOGI`, `core/src/nav.cpp`): time as `hhmmss.s`, minutes of latitude and longitude with 6 decimals, altitude with 3 decimals, heading with 1 decimal, roll and yaw rate with 2, pitch as a whole number. Round the coordinates in whole units of the last digit before splitting degrees and minutes, so 59.9999999' carries into the degrees and never prints as 60. We use 7 decimals of minutes for 2 mm resolution, which the parser also accepts.
 - **Three things to avoid**, seen in the AiO v26 Teensy firmware's `$PAOGI` builder, which the HAT formats above come from (https://github.com/AgOpenGPS-Official/Firmware_Teensy_AiO_26, `lib/aio_navigation/NAVProcessor.cpp`, `NMEAMessageBuilder.h` and `GNSSProcessor.cpp`, commit `2551bff`, read 2026-11-10, GPL v3):
-  - It hard-codes 18 leap seconds for GPS → UTC. Ours come from the binary header ([gnss-um980-config.md](gnss-um980-config.md)).
+  - It hard-codes 18 leap seconds for GPS → UTC. Ours come from the binary header ([gnss-um98x-config.md](gnss-um98x-config.md)).
   - It holds the GPS seconds of week in a 32-bit float. Above 524288 s (the last day of the week) a float's step is 1/16 s, too coarse for a 10 Hz time field. Keep time as integer milliseconds or a double.
   - Its number formatter cuts off the extra decimals instead of rounding.
 - The sentence ID must be exactly `$PAOGI`, with no talker prefix.
@@ -107,7 +107,7 @@ Pitfalls:
 
 ## RTCM over Ethernet
 - AgOpenWeb's datagrams are chunks of the RTCM stream, not whole messages, so frames are reassembled across datagrams, as on the Bluetooth path.
-- Path: UDP 2233 → ring buffer → RTCM3 frame check → the `um980_tx` arbiter → UART1 TX → UM980 **COM1**. This is the same path that Bluetooth RTCM uses, and no port is locked ([gnss-um980-config.md](gnss-um980-config.md)).
+- Path: UDP 2233 → ring buffer → RTCM3 frame check → the `um980_tx` arbiter → UART1 TX → UM980 **COM1**. This is the same path that Bluetooth RTCM uses, and no port is locked ([gnss-um98x-config.md](gnss-um98x-config.md)).
 - Bluetooth RTCM from the phone (SW Maps, [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md)) goes into the same queue. Only one correction source may be active at a time; the arbiter takes frames from the selected source and drops the other's. The diagnostics page shows which source has delivered frames recently.
 - With this in place, AgOpenWeb's NTRIP client can replace the phone as the correction source.
 - **Hold several datagrams between polls.** The AiO v26 Teensy firmware lost corrections in the field because its receive queue held a single datagram; it now queues 8 (its issue #32; details in [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md), "Path into the UM980"). AgOpenWeb's datagrams come 10–25 ms apart, so the W5500 socket's 2 KB RX buffer must be drained at least that often, or made larger.

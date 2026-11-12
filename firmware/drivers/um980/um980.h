@@ -8,7 +8,7 @@
  *    each BESTNAV epoch gets its time of validity on the Pico clock from it.
  *  - Boot state machine (um980_cfg.c): detect the baud rate, identify the
  *    receiver, check its configuration, and provision it if it differs
- *    (plans/gnss-um980-config.md).
+ *    (plans/gnss-um98x-config.md).
  *
  * The driver uses only COM1 and never sends CONFIG RXTYPE.
  * All writes to the port go through um980_send_line(), the single owner of

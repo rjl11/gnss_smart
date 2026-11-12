@@ -20,7 +20,7 @@ No Zero 2 W product brief is in `docs/datasheets/` yet. Board facts here come fr
   - TM210 on UART0, UM980 COM1 on UART1, BMP581 on I2C1, PPS on a GPIO interrupt. SPI0 (GP16–21) stays reserved for the W5500, which is on hold ([ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)).
   - Core 1 runs only the filter, as in [rtos-decision.md](rtos-decision.md).
   - Core 0 runs UART DMA, the parsers, the BMP581 driver, the `um980_tx` arbiter (commands only, see below) and TinyUSB. TinyUSB replaces BTstack and the CYW43 driver, which means less code and fewer interrupts on core 0.
-  - The Pico still configures the UM980 itself at boot ([gnss-um980-config.md](gnss-um980-config.md)), and it is the only device that sends it commands, apart from a PC in a `gnss_tcp` session, which reaches COM1 through the Pico (see below).
+  - The Pico still configures the UM980 itself at boot ([gnss-um98x-config.md](gnss-um98x-config.md)), and it is the only device that sends it commands, apart from a PC in a `gnss_tcp` session, which reaches COM1 through the Pico (see below).
 - **Zero 2 W (Raspberry Pi OS Lite, read-only root):** one daemon, plus gpsd, chrony and OpenOCD, owns:
   - The Bluetooth link to SW Maps through BlueZ: BLE NUS, with Classic SPP as the fallback. Unlike with the ESP32-S3, the SPP fallback survives.
   - An NTRIP client over Wi-Fi, so RTK works without SW Maps.
@@ -75,7 +75,7 @@ A PC on the Zero's Wi-Fi opens a TCP connection to the Zero and gets the UM980 C
   - **Why COM1 through CDC 1 and not COM2:** COM2 is already taken by gpsd (NMEA time) and the RTCM writer, and a tty can't be shared safely between them and ser2net. COM1 also carries the receiver's command replies and the Pico's logs, which is what a PC tool wants to see.
   - **Transparent in both directions.** The Pico doesn't parse, filter or reframe what the PC sends, so UPrecise works as it would on a cable, binary commands included.
   - **Receiver to PC:** the Pico copies every byte it receives on UART1 to CDC 1 unchanged, while it keeps parsing them itself. The PC sees `BESTNAVB` at 20 Hz, `STADOPB`, and all command replies.
-  - **PC to receiver:** the Pico writes CDC 1 bytes to UART1 TX unchanged, as they arrive. With the Zero fitted, RTCM enters COM2, so COM1 TX has no RTCM frames to protect. While a session is open in `full` mode, the `um980_tx` arbiter gives UART1 TX to the session alone: the Pico holds its own commands and the web passthrough until the session closes ([gnss-um980-config.md](gnss-um980-config.md)).
+  - **PC to receiver:** the Pico writes CDC 1 bytes to UART1 TX unchanged, as they arrive. With the Zero fitted, RTCM enters COM2, so COM1 TX has no RTCM frames to protect. While a session is open in `full` mode, the `um980_tx` arbiter gives UART1 TX to the session alone: the Pico holds its own commands and the web passthrough until the session closes ([gnss-um98x-config.md](gnss-um98x-config.md)).
   - **Baud:** CDC 1 is virtual, so the Pico ignores its line coding. UART1 stays at 460800 whatever the PC asks for.
 - **Config item** (part of the versioned config struct, see "Config storage"):
 
@@ -92,7 +92,7 @@ A PC on the Zero's Wi-Fi opens a TCP connection to the Zero and gets the UM980 C
 - **Safety in `full` mode:** the Pico filters nothing, so the PC can send any command, and keeping the receiver usable is up to the person at the PC.
   - **`CONFIG RXTYPE`** passes like any other command. The project rule of never locking a port (risk of bricking) then rests on the user, and the web page states this next to the `full` setting.
   - **Commands that disturb the filter,** such as `UNLOG COM1`, `MODE`, `CONFIG COM1 <baud>` or `FRESET`, also pass. The web page warns that GNSS updates to the filter may stop during a session.
-  - **When the session closes,** the Pico re-runs detection (which finds COM1 at any baud) and its config check (`UNILOGLIST`, `CONFIG`), and re-provisions anything that differs from [gnss-um980-config.md](gnss-um980-config.md). `SAVECONFIG` from the PC therefore can't leave the receiver in a state the Pico won't fix.
+  - **When the session closes,** the Pico re-runs detection (which finds COM1 at any baud) and its config check (`UNILOGLIST`, `CONFIG`), and re-provisions anything that differs from [gnss-um98x-config.md](gnss-um98x-config.md). `SAVECONFIG` from the PC therefore can't leave the receiver in a state the Pico won't fix.
   - **During provisioning,** CDC 1 bytes are dropped and counted, as RTCM is, so the Pico's command sequence isn't interleaved with PC bytes. A session that opens at boot waits until provisioning ends.
   - **No command confusion:** the Pico sends nothing of its own while the session holds UART1 TX, so it never takes a reply to a PC command for its own.
   - **Receiver firmware upgrades over TCP are not supported.** They stay on COM3 over USB-C, as in [rp2350-feasibility.md](rp2350-feasibility.md).
@@ -115,7 +115,7 @@ A PC on the Zero's Wi-Fi opens a TCP connection to the Zero and gets the UM980 C
 - **COM2 ↔ Zero UART, both directions:**
   - UM980 COM2 TX → Zero RXD (GPIO15) carries NMEA time.
   - Zero TXD (GPIO14) → COM2 RX carries RTCM only (see the RTCM path).
-  - COM2 stays at 460800, as [gnss-um980-config.md](gnss-um980-config.md) sets it.
+  - COM2 stays at 460800, as [gnss-um98x-config.md](gnss-um98x-config.md) sets it.
   - Through COM1, the Pico enables `GPRMC COM2 1` and `GPZDA COM2 1`, giving UTC date and time once a second. That is about 0.2 kB/s out, against 1–3 kB/s of RTCM in (estimate).
 - **UART choice on the Zero:**
   - `dtoverlay=miniuart-bt` moves Bluetooth to the mini UART, which leaves the PL011 (`/dev/ttyAMA0`) for the GNSS with a fixed core clock.

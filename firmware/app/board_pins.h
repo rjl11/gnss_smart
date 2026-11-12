@@ -39,7 +39,7 @@
 #define PIN_BMP581_INT        7
 #define BMP581_I2C_HZ         400000
 
-/* UM980 COM1 on UART1 (plans/gnss-um980-config.md). */
+/* UM980 COM1 on UART1 (plans/gnss-um98x-config.md). */
 #define PIN_UM980_UART        uart1
 #define PIN_UM980_TX          4
 #define PIN_UM980_RX          5

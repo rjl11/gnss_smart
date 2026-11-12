@@ -19,7 +19,7 @@ What that buys over bare `ins`:
 - Same constraints as bare `ins`: no heap, all state in `nav_suite_t`, worst-case stack about 13 KB.
 
 ## Lifecycle (core 1)
-1. Wait for the receiver model from core 0 (UM980 or UM982), because it sets `automotive_mode`. The wait ends after 10 s at the latest (start value, not yet measured), with the UM980 setting; a UM982 identified later triggers a re-init ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)). Then zero a static `nav_suite_t`, fill `ins_init_t` and `ins_options_t`, call `nav_suite_init()`.
+1. Zero a static `nav_suite_t`, fill `ins_init_t` and `ins_options_t`, call `nav_suite_init()`. There is no wait for the receiver: `automotive_mode` comes from the antenna-mode setting, which is read from flash at boot. The only re-init is when the setting is dual but core 0 identifies a UM980 ([gnss-um98x-config.md](gnss-um98x-config.md), "INSLIB init and the antenna mode").
 2. Optionally tune `suite.ars_cfg` / `suite.ahrs_cfg` / `suite.baro_cfg` before the first update.
 3. Loop: pop one IMU sample (plus any GNSS/baro that arrived) from the core 0 queue, build an `ins_measurements_t`, call `nav_suite_update()`. One call per TM210 sample, so 800 calls per second. The strapdown runs every call; the covariance prediction runs at `kalman_update_dt_sec` (20 Hz).
 4. After the first usable GNSS fix, and again after moving far (e.g. 50 km), call `nav_suite_set_magnetic_model_position(lat, lon, year)`.
@@ -29,7 +29,7 @@ What that buys over bare `ins`:
 | `ins_options_t` field | Value | Why |
 |---|---|---|
 | `auto_init` | true | Bootstrap from the first good fix; roll/pitch from leveling |
-| `automotive_mode` | true on a UM980, false on a UM982 | Yaw from GNSS course over ground. The UM980 is single-antenna, so this is the main heading source when moving. The UM982 variant feeds its dual-antenna heading into `m.yaw` instead ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)) |
+| `automotive_mode` | true in single-antenna mode, false in dual-antenna mode | Yaw from GNSS course over ground. With one antenna (a UM980, or a UM982 with the slave off) this is the main heading source when moving. In dual-antenna mode a UM982 feeds its heading into `m.yaw` instead ([gnss-um98x-config.md](gnss-um98x-config.md)) |
 | `automotive_min_speed_mps` | 0 (default 2 m/s) to start; try ~1 m/s for slow field work | Below it the course is noise |
 | `kalman_update_dt_sec` | 0 (= 20 Hz) | Covariance prediction rate |
 | `auto_zupt_disable` | false | Bias re-estimation whenever the tractor stands still |
@@ -49,11 +49,11 @@ Zero `ins_measurements_t` every epoch. Set `is_valid` only on an epoch that carr
 | `strapdown_dt_sec` | difference of TM210 timestamps | ~1.25 ms |
 | `acc`, `gyr` | TM210 raw object, converted to FRD SI | `Qll_diag` = PSD, see IMU plan |
 | `mag` | TM210 raw mag, only when the value changed | Off for the INS at first |
-| `gnss_pos` | UM980 BESTNAVB at 20 Hz ([gnss-um980-config.md](gnss-um980-config.md)): lat/lon in rad, ellipsoid height = hgt (MSL) + undulation, σ → diagonal `Qll_ned` | Only when solution status is usable |
-| `gnss_vel` | UM980 horizontal speed + track + vertical speed → NED, σ → diagonal `Qll_ned` | |
+| `gnss_pos` | UM98x BESTNAVB at 20 Hz ([gnss-um98x-config.md](gnss-um98x-config.md)): lat/lon in rad, ellipsoid height = hgt (MSL) + undulation, σ → diagonal `Qll_ned` | Only when solution status is usable |
+| `gnss_vel` | BESTNAVB horizontal speed + track + vertical speed → NED, σ → diagonal `Qll_ned` | |
 | `gnss_leverarm_b` | antenna position relative to the IMU, FRD [m] | Measure on the vehicle |
 | `gnss_delay_ms` / `gnss_delay_us` | IMU epoch time − GNSS time of validity | GNSS time from PPS; INSLIB's history buffer handles the delay |
-| `yaw`, `yaw_delay_ms` / `yaw_delay_us` | UM982 only: UNIHEADINGB heading minus `baseline_yaw_b`, at 20 Hz ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)) | Left invalid on a UM980. Same delay as the GNSS epoch |
+| `yaw`, `yaw_delay_ms` / `yaw_delay_us` | Dual-antenna mode only: UM982 UNIHEADINGB heading minus `baseline_yaw_b`, at 20 Hz ([gnss-um98x-config.md](gnss-um98x-config.md)) | Left invalid in single-antenna mode. Same delay as the GNSS epoch |
 | `baro` | BMP581 pressure [Pa], 100 Hz | New samples only |
 
 GNSS and baro samples are attached to the next IMU epoch after they arrive on core 1; the delay fields carry how old they are.

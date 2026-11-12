@@ -32,12 +32,12 @@ Sources: `docs/datasheets/UM980_Datasheet.pdf` (R1.0, 2022-08), `docs/datasheets
 
 \* after a firmware upgrade.
 
-Both are single-antenna receivers. A dual-antenna variant (mosaic-H, UM982) would be needed for heading at standstill. The UM982 is planned as a variant in [gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md).
+Both are single-antenna receivers. A dual-antenna variant (mosaic-H, UM982) would be needed for heading at standstill. The UM982 is covered, with a single- or dual-antenna mode setting, in [gnss-um98x-config.md](gnss-um98x-config.md).
 
 ## Effect on the system
 - **Open sky: no practical difference** for AgOpenGPS steering. Both hold 1–2 cm RTK, and the UM980 even initialises slightly faster on paper. The mosaic's ppm term is half the UM980's, which only shows on long baselines (e.g. 20 km NTRIP: 1.6 cm vs 2.8 cm + base).
 - **Where the mosaic is better:** tree lines, buildings, jammers (common near roads), multipath off the cab and roof, and engine vibration. Expect fewer float or lost-fix episodes and faster recovery, and RAIM+ adds integrity against wrong fixes. This reduces how many GNSS outages the IMU has to bridge ([imu-adis16465-vs-tm210.md](imu-adis16465-vs-tm210.md) covers the IMU side).
-- **Signals:** the two UM980 sources disagree on Galileo E6. The 2022 datasheet doesn't list it. The newer N4 commands manual lists E6 in signal group 2, the group this project uses ([gnss-um980-config.md](gnss-um980-config.md)), and a UM982 on the same firmware family reported `PPP ENABLE E6-HAS` ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)). So E6 and Galileo HAS are probably available with current firmware; confirm on a UM980 on the bench. The mosaic's E6 support depends on firmware (the 2020 sheet says "hardware ready"). For RTK with an NTRIP or radio base, neither matters.
+- **Signals:** the two UM980 sources disagree on Galileo E6. The 2022 datasheet doesn't list it. The newer N4 commands manual lists E6 in signal group 2, the group this project uses ([gnss-um98x-config.md](gnss-um98x-config.md)), and a UM982 on the same firmware family reported `PPP ENABLE E6-HAS` (same plan, "Bench results"). So E6 and Galileo HAS are probably available with current firmware; confirm on a UM980 on the bench. The mosaic's E6 support depends on firmware (the 2020 sheet says "hardware ready"). For RTK with an NTRIP or radio base, neither matters.
 - **Timing:** both receivers have a PPS output and an event input. The mosaic's two event inputs (<20 ns) can timestamp the IMU's data-ready pulse directly in GNSS time.
 - **Covariance for INSLIB:** SBF `PosCovGeodetic` / `VelCovGeodetic` give a full covariance for `gnss_pos` / `gnss_vel` `Qll_ned`. That is more useful than the UM980's per-axis σ, although `gnss_pos_cov_scale` tuning is still needed.
 - **Heading:** unchanged. `automotive_mode` (heading from COG) stays the main source while moving.

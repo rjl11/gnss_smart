@@ -11,7 +11,7 @@ This plan covers that link on the Pico 2 W (CYW43439 + BTstack) and the path fro
 ## One Bluetooth link, both directions
 | Direction | Content | Rate |
 |---|---|---|
-| Device → phone | NMEA: GGA and RMC at 10 Hz, plus `$GNHDT` on a UM982 ([gnss-um982-dual-antenna.md](gnss-um982-dual-antenna.md)) and GST/GSA if cheap | ~1.5–2 kB/s |
+| Device → phone | NMEA: GGA and RMC at 10 Hz, plus `$GNHDT` in dual-antenna mode (UM982) ([gnss-um98x-config.md](gnss-um98x-config.md)) and GST/GSA if cheap | ~1.5–2 kB/s |
 | Phone → device | RTCM3 from the NTRIP caster | ~1–3 kB/s (MSM4/MSM7, 4 constellations, 1 Hz) |
 
 Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary chunks that don't line up with frame boundaries, so the firmware has to reassemble the frames.
@@ -39,7 +39,7 @@ Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary
    - Forward only whole frames that pass the CRC. Count and drop bad ones.
    - Note the message type of each frame for diagnostics.
 3. **UART1 TX → UM980 COM1 at 460800**, the same port that carries commands and binary logs.
-   - The `um980_tx` arbiter owns UART1 TX. It writes only whole RTCM frames or whole command lines, so the two never interleave. Details in [gnss-um980-config.md](gnss-um980-config.md).
+   - The `um980_tx` arbiter owns UART1 TX. It writes only whole RTCM frames or whole command lines, so the two never interleave. Details in [gnss-um98x-config.md](gnss-um98x-config.md).
    - **No port is locked.** `CONFIG RXTYPE` is never sent, because of the risk of bricking. COM1 stays at the default `AUTO`, and in rover mode the receiver recognises RTCM by itself.
    - Only one cable is needed, and no PIO state machine. COM3 is the module's USB-C port, left for a PC, and the COM2 pins are not connected.
 - **Rejected alternative:** a PIO UART TX to COM2, locked with `CONFIG RXTYPE COM2 RTCM`. It keeps COM1 free of corrections, but it needs a port lock (bricking risk) and a second wire.

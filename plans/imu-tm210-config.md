@@ -6,7 +6,7 @@ The user should only have to connect a TM210, new or previously used, and the Pi
 - the target settings
 - the boot-time state machine that detects, checks and provisions the IMU
 
-It follows the same pattern as the UM980 ([gnss-um980-config.md](gnss-um980-config.md)). The resulting IMU data and its conversion for INSLIB are in [imu-tm210.md](imu-tm210.md).
+It follows the same pattern as the UM980/UM982 ([gnss-um98x-config.md](gnss-um98x-config.md)). The resulting IMU data and its conversion for INSLIB are in [imu-tm210.md](imu-tm210.md).
 
 SYD's documents disagree with the real TM210 in several places. **Where they differ, the bench results below (2026-11-06) win**, and the documents are quoted only for background.
 
@@ -164,7 +164,7 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 4. **Run:** UART0 RX goes to the CMD 41 parser and the 1 Hz Status request starts ([imu-tm210.md](imu-tm210.md), "Firmware: reading the TM210"). Samples flow to the core 1 queue. Before "Run", INSLIB gets no IMU data.
 
 **How it's built:**
-- Same pattern as `gnss_um980_cfg`: send, wait for the reply, retry, and record each step's result for the diagnostics page. The page shows the state, last error and node ID.
+- Same pattern as `gnss_um98x_cfg`: send, wait for the reply, retry, and record each step's result for the diagnostics page. The page shows the state, last error and node ID.
 - Each sensor has its own state machine and UART, and they run concurrently on core 0 ([rtos-decision.md](rtos-decision.md)).
 - **Packet code:** the encoder/decoder is a small C module written for the firmware, with packed structs and byte-wise CRC access, so it doesn't rely on alignment.
   - It follows the TM210 layout above, not the library's: bytes 16–17 and 18–19 are two uint16 fields, and bits 20 and 26–28 have the meanings found on the bench.

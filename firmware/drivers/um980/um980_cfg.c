@@ -1,6 +1,6 @@
 /*
  * UM980 boot state machine: detect, identify, check, provision.
- * Follows plans/gnss-um980-config.md. CONFIG RXTYPE is never sent.
+ * Follows plans/gnss-um98x-config.md. CONFIG RXTYPE is never sent.
  *
  * Reply formats that are not yet confirmed on a UM980 (the plan's open bench
  * questions) are matched loosely, and with cfg.verbose every reply line is
@@ -471,8 +471,8 @@ void um980_cfg_step(um980_t *g, uint64_t now)
             LOG(g, "found at %u baud: product %d, %s, %s", g->baud, g->model, g->sw_version,
                 g->serial);
             if (g->model != UM980_PRODUCT_UM980 || g->build < UM980_MIN_BUILD) {
-                /* The UM982 variant is recognised, but this build only has the
-                 * UM980 target table (plans/gnss-um982-dual-antenna.md).
+                /* The UM982 is recognised, but this build only has the
+                 * UM980 target table (plans/gnss-um98x-config.md).
                  * Nothing is written to it: it is used as it is. */
                 g->last_error = UM980_E_UNSUPPORTED;
                 LOG(g, "error: %s, running with the receiver as it is",

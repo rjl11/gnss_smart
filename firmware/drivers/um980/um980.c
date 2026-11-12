@@ -200,7 +200,7 @@ static void decode_bestnav(um980_t *g, const uint8_t *p, um980_nav_t *n)
     n->sd_hor_speed_mps = rd_f32(p + 116);
 
     /* An epoch with no satellites is not a measurement, whatever its status
-     * says (plans/gnss-um980-config.md, open questions). */
+     * says (plans/gnss-um98x-config.md, open questions). */
     n->pos_usable = n->sol_status == UM980_SOL_COMPUTED && is_fix_type(n->pos_type) &&
                     n->n_used > 0 && isfinite(n->lat_deg) && isfinite(n->lon_deg) &&
                     isfinite(n->hgt_msl_m) && isfinite(n->undulation_m) &&
