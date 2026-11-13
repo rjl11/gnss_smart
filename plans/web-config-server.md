@@ -56,7 +56,8 @@ A cmake option `WEB_MODE` selects it, passed to the code as `APP_WEB_MODE` in `a
 **Bench results (2026-11-13, bare Pico 2 W):**
 - Fallback: built with a station SSID that doesn't exist. Join attempts failed with "network not found" (backoff 5, 10, 20 s), and at 33 s the log shows `no station link: open AP "gnss_smart"`. A scan from miniPi sees `gnss_smart` on channel 3 at −54 dBm, open (no Privacy bit, no RSN or WPA element).
 - Forced AP (`WIFI_MODE=ap`): AP up at boot, init 901 ms, `clients 0`.
-- **Not tested yet:** a phone joining, getting a 192.168.4.x lease and opening the page (no Wi-Fi on the bench PC, and miniPi's only uplink is its Wi-Fi).
+- Client test from dietpi (a Pi on Ethernet, 192.168.1.51, using its spare `wlan0`): `iw connect gnss_smart` associated at −45 dBm. dhclient got 192.168.4.16 with router and DNS 192.168.4.1 and a 24 h lease, and the Pico logged `DHCPS: client connected ... host="DietPi"` and `clients 1`. Over the AP: `/` 3457 B in 20 ms, `/status.json` in 7 ms, 30 of 30 requests OK. DNS at 192.168.4.1 answers `example.com` and `connectivitycheck.gstatic.com` with 192.168.4.1, and an mDNS query for `gnss-smart.local` is answered with 192.168.4.1. dietpi's `wlan0` was put back down afterwards.
+- **Not tested yet:** an Android phone (captive-portal popup, whether it keeps the connection without internet, `.local` in the browser).
 
 ### Over Ethernet (on hold with the W5500)
 The same pages could also be served over the W5500 (ioLibrary has a small HTTP server), so the device can be configured from the tractor network without Wi-Fi. See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
