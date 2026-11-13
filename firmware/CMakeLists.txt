@@ -49,10 +49,11 @@ else()
 endif()
 
 # Wi-Fi and the web server (plans/web-config-server.md, "When Wi-Fi runs").
-# always: station + status page from boot (the development default).
-# off: no Wi-Fi code linked in. switch (GPIO22 at boot) comes in Phase 5.
-set(WEB_MODE always CACHE STRING "Web server: always or off")
-set_property(CACHE WEB_MODE PROPERTY STRINGS always off)
+# always: Wi-Fi and the web server from boot (the development default).
+# switch: only when GPIO22 is pulled to GND at boot (production).
+# off: no Wi-Fi code linked in.
+set(WEB_MODE always CACHE STRING "Web server: always, switch or off")
+set_property(CACHE WEB_MODE PROPERTY STRINGS always switch off)
 set(WIFI_STA_SSID "TeliaGateway" CACHE STRING "Wi-Fi network to join")
 set(WIFI_STA_PASSWORD "" CACHE STRING "Wi-Fi password; empty for an open network")
 # auto: station, open AP gnss_smart if not joined within 30 s of boot.
@@ -68,12 +69,17 @@ elseif(WIFI_MODE STREQUAL "ap")
 else()
     message(FATAL_ERROR "WIFI_MODE must be auto, sta or ap, not '${WIFI_MODE}'")
 endif()
-if(WEB_MODE STREQUAL "always")
+if(WEB_MODE STREQUAL "always" OR WEB_MODE STREQUAL "switch")
+    if(WEB_MODE STREQUAL "always")
+        set(APP_WEB_MODE_VALUE 1)
+    else()
+        set(APP_WEB_MODE_VALUE 2)
+    endif()
     add_subdirectory(drivers/ap_servers)
     target_sources(app PRIVATE app/web/web.c app/web/jsonw.c app/web/config_web.c)
     target_link_libraries(app PRIVATE ap_servers)
     target_compile_definitions(app PRIVATE
-        APP_WEB_MODE=1
+        APP_WEB_MODE=${APP_WEB_MODE_VALUE}
         APP_WIFI_MODE=${APP_WIFI_MODE_VALUE}
         "APP_WIFI_STA_SSID=\"${WIFI_STA_SSID}\""
         "APP_WIFI_STA_PASSWORD=\"${WIFI_STA_PASSWORD}\""
@@ -89,10 +95,8 @@ if(WEB_MODE STREQUAL "always")
         ${CMAKE_CURRENT_LIST_DIR}/app/web/www/config.html)
 elseif(WEB_MODE STREQUAL "off")
     target_compile_definitions(app PRIVATE APP_WEB_MODE=0)
-elseif(WEB_MODE STREQUAL "switch")
-    message(FATAL_ERROR "WEB_MODE=switch is Phase 5 and not implemented yet")
 else()
-    message(FATAL_ERROR "WEB_MODE must be always or off, not '${WEB_MODE}'")
+    message(FATAL_ERROR "WEB_MODE must be always, switch or off, not '${WEB_MODE}'")
 endif()
 
 target_link_libraries(app PRIVATE

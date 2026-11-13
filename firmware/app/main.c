@@ -27,7 +27,7 @@
 #include "tm210.h"
 #include "uart_dma.h"
 #include "um980.h"
-#if APP_WEB_MODE == APP_WEB_ALWAYS
+#if APP_WEB_BUILT
 #include "hardware/watchdog.h"
 #include "web/config_web.h"
 #include "web/jsonw.h"
@@ -71,6 +71,12 @@ static uint32_t s_hdg_used, s_hdg_gated;
  * for the fields that only apply after a reboot. */
 static settings_t s_settings, s_boot_settings;
 static bool s_settings_from_flash;
+
+#if APP_WEB_BUILT
+/* Wi-Fi and the web server run this boot: always in WEB_MODE=always, in
+ * WEB_MODE=switch only when GPIO22 was pulled to GND at boot. */
+static bool s_web_on;
+#endif
 
 static void nav_params_from_settings(nav_params_t *p, const settings_t *s)
 {
@@ -233,10 +239,13 @@ static void print_status(uint64_t now, uint32_t baro_hz)
 
     printf("\n--- t=%.1f s ---\n", (double)now * 1e-6);
 
-#if APP_WEB_MODE == APP_WEB_ALWAYS
+#if APP_WEB_BUILT
     web_info_t wi;
     web_get_info(&wi);
     const uint8_t *ip = (const uint8_t *)&wi.ip;
+    if (!s_web_on) {
+        printf("WIFI  off             (web-mode switch open at boot)\n");
+    } else {
     printf("WIFI  %-15s %s", web_state_name(wi.state), web_ssid());
     if (wi.state == WEB_WIFI_UP) {
         printf("  http://%u.%u.%u.%u/  %ld dBm", ip[0], ip[1], ip[2], ip[3], (long)wi.rssi_dbm);
@@ -247,6 +256,7 @@ static void print_status(uint64_t now, uint32_t baro_hz)
         printf("  retry in %lu s", (unsigned long)wi.retry_in_s);
     }
     printf("  joins %lu  drops %lu\n", (unsigned long)wi.joins, (unsigned long)wi.drops);
+    }
 #endif
 
     printf("IMU   %-15s %4lu Hz  crc %lu  gaps %lu  ", tm210_state_name(tm210_state(&s_imu)),
@@ -341,7 +351,7 @@ static void print_status(uint64_t now, uint32_t baro_hz)
     }
 }
 
-#if APP_WEB_MODE == APP_WEB_ALWAYS
+#if APP_WEB_BUILT
 static void jw_vec3(jw_t *w, const char *key, const float *v, int decimals)
 {
     jw_arr(w, key);
@@ -526,7 +536,7 @@ static void publish_status_json(uint64_t now, uint32_t baro_hz)
 }
 #endif
 
-#if APP_WEB_MODE == APP_WEB_ALWAYS
+#if APP_WEB_BUILT
 static uint64_t s_reboot_at;
 
 /* Live fields: the filter settings go to core 1, which re-initialises; the
@@ -624,23 +634,39 @@ int main(void)
     s_boot_settings = s_settings;
     printf("[settings] %s\n", s_settings_from_flash ? "loaded from flash" : "build defaults");
 
-#if APP_WEB_MODE == APP_WEB_ALWAYS
-    /* Before the sensor UARTs start: loading the CYW43439 firmware blocks for
-     * a few hundred ms, longer than the IMU ring holds. The join itself runs
-     * in the background from web_poll(). */
-    const web_config_t web_cfg = {
-        .mode = s_settings.wifi_mode == APP_WIFI_AP  ? WEB_NET_AP :
-                s_settings.wifi_mode == APP_WIFI_STA ? WEB_NET_STA : WEB_NET_AUTO,
-        .ssid = s_settings.sta_ssid, .password = s_settings.sta_password,
-        .ap_ssid = APP_WIFI_AP_SSID, .ap_fallback_s = APP_WIFI_AP_FALLBACK_S,
-        .hostname = APP_WEB_HOSTNAME,
-    };
-    uint64_t t_web = time_us_64();
-    bool web_ok = web_init(&web_cfg);
-    config_web_init();
-    config_web_publish(&s_settings, &s_boot_settings, s_settings_from_flash, NULL);
-    printf("[web] init %s in %lu ms\n", web_ok ? "done" : "failed",
-           (unsigned long)((time_us_64() - t_web) / 1000u));
+#if APP_WEB_BUILT
+#if APP_WEB_MODE == APP_WEB_SWITCH
+    /* Production: the web-mode switch is read once, here. Pulled to GND =
+     * Wi-Fi on for this boot; open (internal pull-up) = off, so the radio,
+     * its current draw and its interrupts stay away from the filter. */
+    gpio_init(PIN_WEB_MODE_SWITCH);
+    gpio_set_dir(PIN_WEB_MODE_SWITCH, GPIO_IN);
+    gpio_pull_up(PIN_WEB_MODE_SWITCH);
+    sleep_ms(2); /* let the pull-up charge the switch wiring */
+    s_web_on = !gpio_get(PIN_WEB_MODE_SWITCH);
+    printf("[web] web-mode switch (GP%d) %s: Wi-Fi %s\n", PIN_WEB_MODE_SWITCH,
+           s_web_on ? "to GND" : "open", s_web_on ? "on" : "off");
+#else
+    s_web_on = true;
+#endif
+    if (s_web_on) {
+        /* Before the sensor UARTs start: loading the CYW43439 firmware blocks for
+         * a few hundred ms, longer than the IMU ring holds. The join itself runs
+         * in the background from web_poll(). */
+        const web_config_t web_cfg = {
+            .mode = s_settings.wifi_mode == APP_WIFI_AP  ? WEB_NET_AP :
+                    s_settings.wifi_mode == APP_WIFI_STA ? WEB_NET_STA : WEB_NET_AUTO,
+            .ssid = s_settings.sta_ssid, .password = s_settings.sta_password,
+            .ap_ssid = APP_WIFI_AP_SSID, .ap_fallback_s = APP_WIFI_AP_FALLBACK_S,
+            .hostname = APP_WEB_HOSTNAME,
+        };
+        uint64_t t_web = time_us_64();
+        bool web_ok = web_init(&web_cfg);
+        config_web_init();
+        config_web_publish(&s_settings, &s_boot_settings, s_settings_from_flash, NULL);
+        printf("[web] init %s in %lu ms\n", web_ok ? "done" : "failed",
+               (unsigned long)((time_us_64() - t_web) / 1000u));
+    }
 #endif
 
     if (!uart_dma_init(&s_imu_port, PIN_TM210_UART, PIN_TM210_TX, PIN_TM210_RX, TM210_BAUD,
@@ -735,9 +761,11 @@ int main(void)
             printf("[inslib] %s\n", msg);
         }
 
-#if APP_WEB_MODE == APP_WEB_ALWAYS
-        web_poll(now);
-        handle_config_cmd(now);
+#if APP_WEB_BUILT
+        if (s_web_on) {
+            web_poll(now);
+            handle_config_cmd(now);
+        }
         if (s_reboot_at != 0 && now >= s_reboot_at) {
             printf("[config] reboot\n");
             watchdog_reboot(0, 0, 0);
@@ -753,8 +781,10 @@ int main(void)
             s_baro_prev = bmp581_stats(&s_baro)->samples;
 
             print_status(now, baro_hz);
-#if APP_WEB_MODE == APP_WEB_ALWAYS
-            publish_status_json(now, baro_hz);
+#if APP_WEB_BUILT
+            if (s_web_on) {
+                publish_status_json(now, baro_hz);
+            }
 #endif
             next_status += STATUS_PERIOD_US;
         }

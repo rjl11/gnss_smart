@@ -13,7 +13,7 @@ A cmake option `WEB_MODE` selects it, passed to the code as `APP_WEB_MODE` in `a
 | `WEB_MODE` | Behaviour |
 |---|---|
 | `always` (development default) | Wi-Fi and the web server start at boot and stay on. `web_init()` runs before the sensor UARTs start, because loading the CYW43439 firmware blocks for a few hundred ms, longer than the IMU ring holds; the join then runs in the background. |
-| `switch` (production, later) | GPIO22 (internal pull-up, switch or jumper to GND, low = web on) is read once at boot. Changing mode means flipping the switch and resetting. The pin is already reserved as `PIN_WEB_MODE_SWITCH` in `firmware/app/board_pins.h`. |
+| `switch` (production) | GPIO22 (internal pull-up, switch or jumper to GND, low = web on) is read once at boot. Changing mode means flipping the switch and resetting. The pin is `PIN_WEB_MODE_SWITCH` in `firmware/app/board_pins.h`; on the Pico header it is pin 29, next to GND on pin 28. With the switch open, `cyw43_arch` is never started: no radio, no lwIP, no LED (the LED is on the CYW43439), and the USB report says `WIFI  off`. Implemented 2026-11-13: the web code is linked in for both `always` and `switch` (`APP_WEB_BUILT`), and a runtime flag set at boot decides whether it runs. |
 | `off` | No Wi-Fi code linked in. |
 
 - A runtime toggle in `switch` mode (debounce about 50 ms on core 0, start or stop Wi-Fi from the main loop, never from the interrupt handler) stays optional. Bringing up `cyw43_arch` takes a few hundred ms and allocates lwIP buffers, so the boot-time read comes first.
@@ -146,3 +146,4 @@ BLE and Wi-Fi can run together on the CYW43439, but they share airtime and RAM. 
 3. Phase 3: with `TeliaGateway` off, the Pico falls back to the AP. A phone joins `gnss_smart` without a password, gets a 192.168.4.x address and opens 192.168.4.1.
 4. Phase 4: save a config, power-cycle, check it's restored. Cut power during a save, check the previous config survives. Change a lever arm live: output pauses with the status flag set, the filter re-aligns and output resumes without a reboot.
 5. Phase 5: with `WEB_MODE=switch`, boot with GPIO22 high: Wi-Fi never starts (no SSID visible, current draw unchanged). Boot with it low: Wi-Fi comes up as in Phase 2 or 3.
+   - Done 2026-11-13 (bare Pico 2 W, GPIO22 open): the log shows `web-mode switch (GP22) open: Wi-Fi off` and `WIFI  off`; the Pico doesn't answer ping at its old address, and a scan from dietpi finds no `gnss_smart`. Not yet done: GPIO22 to GND (needs a jumper), and the current draw with Wi-Fi off and on.

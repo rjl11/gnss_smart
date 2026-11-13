@@ -74,15 +74,20 @@
 #define APP_BARO_MAX_AGE_US         100000
 
 /* When Wi-Fi and the web server run (plans/web-config-server.md, "When
- * Wi-Fi runs"). Set at build time with cmake -DWEB_MODE=always|off; switch
- * (GPIO22 at boot) is Phase 5. The station SSID and password come from cmake
- * too (WIFI_STA_SSID, WIFI_STA_PASSWORD; an empty password means an open
- * network). */
+ * Wi-Fi runs"). Set at build time with cmake -DWEB_MODE=always|switch|off.
+ * switch: GPIO22 (PIN_WEB_MODE_SWITCH, internal pull-up) is read once at
+ * boot; pulled to GND = Wi-Fi and the web server on, open = off for this
+ * boot. The station SSID and password come from cmake too (WIFI_STA_SSID,
+ * WIFI_STA_PASSWORD; an empty password means an open network). */
 #define APP_WEB_OFF                 0
 #define APP_WEB_ALWAYS              1
+#define APP_WEB_SWITCH              2
 #ifndef APP_WEB_MODE
 #define APP_WEB_MODE                APP_WEB_OFF
 #endif
+/* The web code is linked in (always or switch); whether it runs this boot is
+ * decided at runtime in switch mode. */
+#define APP_WEB_BUILT               (APP_WEB_MODE != APP_WEB_OFF)
 #ifndef APP_WIFI_STA_SSID
 #define APP_WIFI_STA_SSID           "TeliaGateway"
 #endif
