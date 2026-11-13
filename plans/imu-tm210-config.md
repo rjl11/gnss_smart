@@ -35,6 +35,9 @@ Sources:
   - **On the TM210 they read 0 on every packet**, even while the Status object reported QoS 4–5.
   - So the parser accepts any value and ignores it. The host sends 0. QoS comes from the Status object.
 - **IDs:** host = 2, broadcast = 0, unspecified = 1 (`EP_ID_*` in `EasyObjectDictionary.h`).
+  - Sensor node IDs are 0x064–0x7FF (100–2047) (user guide, "Overview of EasyProtocol").
+  - Both the node ID and a device name of up to 12 characters can be changed in ImuAssistant ("TransducerM – Node ID, Firmware Version, UUID"). So the firmware takes the node ID from each reply, never a constant; `tm210.c` already does.
+  - A reply to a Request is addressed to whoever sent it, so TO_ID = 2 for our host (user guide, "Request").
 
 ### Reading and writing settings (bench-verified)
 - **Read:** send a Request (CMD 12, payload `{cmdRequest = 21, 0, 0, 0}`), broadcast is fine. The TM210 answers with its Setting object (CMD 21, 20-byte payload). The reply's `fromId` is the node ID.
@@ -42,6 +45,7 @@ Sources:
   1. Start from the read-back and change only the wanted fields. Set bit 17 (`request_acknowledge`) = 1 and bit 18 (`save_Setting_Permanently`) = 0.
   2. Send to `toId = <node ID>`, as the vendor's `Example_ChangeSetting()` does.
   3. The Acknowledge (CMD 13, `cmdAck = 21`) came back within 1.5 s every time. The new values were in effect straight away, with no restart: the output rate, output switches and USB output all changed on the spot.
+     - **Only byte 0 of the Ack counts.** The user guide ("Acknowledge") calls bytes 1–3 "value undefined". On our TM210 they echoed switch bytes 1–3 of the Setting just written: Ack `15 a0 1a 00` for switches `5b a0 1a 00` (miniPi, 2026-11-12) and `5f a0 1a 00` (PC, 2026-11-13). `tm210.c` checks only byte 0.
 - **Bits 17 and 18 are stored as sent**, and the read-back echoes them. A TM210 last saved from ImuAssistant reads bit 18 = 1. **The boot check ignores bits 17 and 18.**
 - **Read-modify-write is required**, because several fields hold values the documents call fixed but this TM210 doesn't have (next section).
 
@@ -102,9 +106,14 @@ The library calls bits 26–31 "unused, must be 0", but bits 26–28 clearly do 
   - **Recovery when the baud is unknown:** for the TM210 the vendor's answer is the USB port ("simply use its USB interface to connect and find or reset the baudrate"). The 6-second 115200 SCAN lock in the user guides applies to the TM200/TM35x only. The firmware scans the UART baud rates itself, and USB (bit 20) is the manual fallback.
 - **USB:** the USB port is a virtual COM port (VID:PID 0483:5740). Its baud setting has no effect. With bit 20 on, it carries the same objects at the same rate as the UART: 800 Hz raw-only ran over USB with no gaps.
 - **Calibration commands** (CMD 23: CalibB, AN002 forced calibration, heading fix, compass calibration) affect only the TM210's own fused outputs. **We use raw data only, so the firmware never sends them.** INSLIB estimates the biases itself.
+  - The user guide gives more reasons not to send them. A power loss during CalibB's 20 s flash write "may result in unrecoverable damage" ("Boot Mode"), and its success report (Calibration object type 0x14) asks for a power cycle afterwards ("Calibration").
+  - The TM210 also sends Calibration objects (CMD 23) back as status reports, but only after a calibration command, so the parser never expects them.
 - **Status object (CMD 22):** answered on request while Status output was off (17.8 °C, internal rate 802 Hz, QoS 5).
 - **`Ep_Combo` (CMD 43)** is a packed set of integers: gyro in 1e-5 rad/s, acc in 1e-5 g with the library's 1 g = 9.794 m/s², plus QoS, temperature and rate. It is not used. Raw (CMD 41, float32) keeps full resolution and is what [imu-tm210.md](imu-tm210.md) is built on.
 - **Start-up:** Auto boot gives a 3.2 s cold start, and Static boot 10–30 s. The TM210 answers requests even during its silent time.
+  - The TM3xx user guide ("Boot Mode", "Opening the Device") gives longer figures. Static boot needs 30 s of stillness with silent time 0, or silent time + 10 s. In Static or Auto mode the module "may ignore" commands for 13.5–30 s after power-on.
+  - These are the guide's figures, not measured on our TM210, which answered 3.2 s after an Auto cold start.
+  - Detect (step 1 below) retries every 2 s and never gives up, so a slow first answer after a Static boot is expected, not a fault.
 
 ### Cross-check: the TM171 in the AiO v4.5 firmware
 An independent source for the same protocol: the AiO v4.5 autosteer firmware at https://github.com/renatorgr/Boards (`Firmware/v4.5_AiO_WEB/TM171.ino` and its README, read 2026-11-10, GPL v3). It reads and writes the Setting object of a **TM171**, checked on a real unit on 2026-10-24. These are their results on a TM171, not measurements on our TM210. Its code is GPL v3, so we take the facts, not the code.

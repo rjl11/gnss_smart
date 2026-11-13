@@ -28,7 +28,11 @@ Header bit fields: CMD (7 bits), 3 bits, FROM_ID (11), TO_ID (11). The user guid
 | 16–27 | acc x, y, z (float32) | g (vendor: 1 g = 9.8158 m/s²) |
 | 28–39 | mag x, y, z (float32) | Earth-field units |
 
-**Status object, CMD 22**: timestamp, temperature [°C], internal update rate [Hz], QoS (0–5). Request with the broadcast command `aa55080c08000016000000e0ed`.
+The user guide ("Raw Data Display" and "Raw Sensor Data") calls this "calibrated sensor data without applying any data processing filter", with gravity part of the accelerometer measurement.
+
+**Status object, CMD 22**: timestamp, temperature [°C], internal update rate [Hz], QoS (0–5). Request with the broadcast command `aa55080c08000016000000e0ed`. From the user guide ("Status" and "Step 2 – Heat Up"):
+- **QoS:** 0 booting or restarting, 1 system fault, 2 limited (for example right after a dynamic boot), 3 basic (right after a static boot), 4 fine, 5 very good. **The technical specification applies only from QoS 4.** The status bits need firmware V4.7.5 (3) or later; earlier firmware sends 0.
+- **Temperature** is measured inside the main sensor chip, and is usually above ambient because of the module's own heat.
 
 ## TM210 configuration (set by the MCU at boot)
 The Pico checks these settings at every boot and provisions the TM210 if they don't match: read-modify-write of the Setting object, applied to RAM first and saved to flash only after the output has been verified. No PC is needed. Details are in [imu-tm210-config.md](imu-tm210-config.md).
@@ -68,7 +72,7 @@ INSLIB wants FRD, accelerometer as **specific force** in m/s² (level and at res
 | Accelerometer | `(−ax, ay, az) × 9.8158`. The TM210's raw object reports the **gravity vector**, not specific force (bench result 2026-11-12, below; the datasheet footnote shows the same `(0, 0, −1)` with z pointing to the sky). The firmware sets this with `APP_TM210_ACC_IS_GRAVITY 1`. |
 | Magnetometer | `(mx, −my, −mz) × ~50 µT` (approx. total field in Denmark), then refine with mag calibration |
 
-Evidence for the accelerometer sign, from another project: the AgOpenWeb-HAT IMU evaluation (https://github.com/chriskinal/AgOpenWeb-HAT, `hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md` §8.4, commit `e4bd9ef`, read 2026-11-10) logged a **TM171** beside an ST IMU and found "the same axes [X forward, Y left, Z up], its accel the opposite sign (it reports gravity), its gyro in rad/s". That points to the second form, `(−ax, ay, az) × 9.8158`. It was measured on a TM171's output, not on our TM210's raw object; our bench check (below) found the same on the TM210.
+Evidence for the accelerometer sign, from another project: the AgOpenWeb-HAT IMU evaluation (https://github.com/chriskinal/AgOpenWeb-HAT, `hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md` §8.4, commit `e4bd9ef`, read 2026-11-10) logged a **TM171** beside an ST IMU and found "the same axes [X forward, Y left, Z up], its accel the opposite sign (it reports gravity), its gyro in rad/s". That points to the second form, `(−ax, ay, az) × 9.8158`. It was measured on a TM171's output, not on our TM210's raw object; our bench check (below) found the same on the TM210. The user guide's own raw-packet example ("Example of EasyProtocol", "More Examples") reads accel z = −1.00012 g with near-zero gyro, which fits too. It is a TM3xx example with an unstated orientation, so it is supporting evidence only.
 
 Do the sign/unit conversion in the parser so all later data is plain FRD SI. Put the **physical mounting** (TM210 not aligned with the vehicle) into config as `mount_rpy_deg` and compose it into `imu_acc_misalignment` / `imu_gyr_misalignment` with `imu_mount_compose()` from `external/INSLIB/tools/imu_mount.h`.
 
@@ -98,6 +102,7 @@ So the x and y gyro noise may be about 2× the datasheet-derived figure, and the
 1. **Allan variance**: static log at 800 Hz, constant temperature, after a 30 min warm-up → `external/INSLIB/tools/allan_variance.py` → final PSDs and bias random walks.
    - **Length: 8–12 h.** The relative error of the Allan deviation at averaging time τ is about 1/√(2(N−1)), with N = T/τ windows. The random walk terms (τ = 1–10 s) are fine after minutes. At the bias-instability minimum (about 650 s on the TM171, above) 2 h gives N ≈ 11, about ±22 %. The bias random walk sits on the rising slope beyond it (τ ≈ 1000–3000 s), which needs 8–12 h for about ±10–15 %.
    - **Temperature:** the gyro drift of ±0.004 °/s/°C is about 14 °/h per degree, more than the bias instability, so a room that cools overnight shows up as false bias random walk. Log the Status temperature at 1 Hz beside the data.
+   - **QoS:** the user guide's "Step 2 – Heat Up" keeps the module still for about 5 min until QoS reaches 5, and calls that "extremely important". Start the log only once QoS is 5 and the 30 min warm-up is over, and log QoS beside the temperature.
    - **Gaps:** over USB whole packets go missing (bench results below). Use the TM210 timestamps and split the log at gaps, or fill single missing samples.
    - **Size:** 40 B × 800 Hz ≈ 115 MB/h of raw payload.
 2. **6-position static test** (each axis up and down, ~30 s each) → `external/INSLIB/tools/inslib_imu_calib.py` → accelerometer scale and fixed bias, gyro fixed bias, into `imu_acc_misalignment` / `imu_*_fixed_bias`. This also fixes the "units, not absolute" accelerometer magnitude.
