@@ -95,7 +95,11 @@ Start values from the datasheet, to be replaced by Allan variance results:
 So the x and y gyro noise may be about 2× the datasheet-derived figure, and the accelerometer a little quieter. Their note says the TM171 outputs bias-corrected, filtered data, and they logged it at 20 ms spacing, so the figures are not directly those of a TM210 raw object at 800 Hz. They are a reason to run our own Allan test before trusting the start values, not replacements for them.
 
 ## Calibration steps
-1. **Allan variance**: 2 h static log at 800 Hz, constant temperature → `external/INSLIB/tools/allan_variance.py` → final PSDs and bias random walks.
+1. **Allan variance**: static log at 800 Hz, constant temperature, after a 30 min warm-up → `external/INSLIB/tools/allan_variance.py` → final PSDs and bias random walks.
+   - **Length: 8–12 h.** The relative error of the Allan deviation at averaging time τ is about 1/√(2(N−1)), with N = T/τ windows. The random walk terms (τ = 1–10 s) are fine after minutes. At the bias-instability minimum (about 650 s on the TM171, above) 2 h gives N ≈ 11, about ±22 %. The bias random walk sits on the rising slope beyond it (τ ≈ 1000–3000 s), which needs 8–12 h for about ±10–15 %.
+   - **Temperature:** the gyro drift of ±0.004 °/s/°C is about 14 °/h per degree, more than the bias instability, so a room that cools overnight shows up as false bias random walk. Log the Status temperature at 1 Hz beside the data.
+   - **Gaps:** over USB whole packets go missing (bench results below). Use the TM210 timestamps and split the log at gaps, or fill single missing samples.
+   - **Size:** 40 B × 800 Hz ≈ 115 MB/h of raw payload.
 2. **6-position static test** (each axis up and down, ~30 s each) → `external/INSLIB/tools/inslib_imu_calib.py` → accelerometer scale and fixed bias, gyro fixed bias, into `imu_acc_misalignment` / `imu_*_fixed_bias`. This also fixes the "units, not absolute" accelerometer magnitude.
 3. **Mount angles** on the vehicle: `external/INSLIB/tools/inslib_frame_align.py` or measure, set `mount_rpy_deg`.
 4. **Magnetometer** (later, on the vehicle): `external/INSLIB/tools/inslib_mag_calib.py` → `mag_misalignment`, `mag_fixed_bias`.
