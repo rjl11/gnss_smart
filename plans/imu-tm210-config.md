@@ -199,7 +199,7 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 
 **Done on miniPi and the PC (2026-11-12/13, over USB, RAM only):** details in [imu-tm210.md](imu-tm210.md), "Bench results (2026-11-12/13, TM210 over USB on miniPi and on the Windows PC)".
 - **With USB output off in flash (bit 20 = 0), the TM210 still answers Setting and Status requests over USB** and acknowledges a RAM write there, but it streams nothing. So USB is a recovery path even when bit 20 is off.
-- The target applied in RAM again on both hosts: 10 min of raw-only output at 802–803 packets per host second, with 0 CRC errors. Whole packets went missing over USB (684 on miniPi, 77 on the PC), most likely on the USB side. That was over USB, so item 1 below is still open, and it also shows whether the TM210 skips samples on its UART.
+- The target applied in RAM again on both hosts: 10 min of raw-only output at 802–803 packets per host second, with 0 CRC errors. Whole packets went missing over USB (684 on miniPi, 77 on the PC), most likely on the USB side. That was over USB; the UART run on dietpi below (item 1, passed) lost none.
 
 **Done on dietpi (2026-11-13, Pico UART0, TM210 powered from VBUS):**
 - The Ack for a RAM write that changes the baud arrives at the old baud, but the new baud never becomes active (see "Baud" above). This was open item 1; the old provisioning got stuck on it, because its layout guard then saw a baud word that didn't match the rate in use.
@@ -207,9 +207,10 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 - With USB connected, the Pico's UART requests went unanswered after a power cycle (see "USB" above).
 - **Provisioning from 115200 by our code passed.** The TM210's original flash settings were written back over USB (115200, 50 Hz, raw + RPY, silent time 1 s). After a power cycle the Pico applied the target in RAM, saved 921600 to flash and waited in `power-cycle`; rescans every 2 s found it at 115200 with 921600 set and wrote nothing more. After the next power cycle the TM210 streamed at 921600, and the Pico found it there: fast path, "settings already match, nothing written", RUN at 802–804 Hz with 0 CRC errors.
   - Between the two steps the TM210 again sent data but answered no request, this time also with USB unplugged, and at the same time the BMP581 failed with I2C errors. Both recovered after the bench wiring was checked, so that episode was the wiring, not the TM210. The USB note above may have the same cause.
+- **10 minutes at 921600 on the Pico's UART0 passed** (USB unplugged, the Pico's 1 Hz status report captured over USB from uptime 85 s to 714 s). All 630 one-second reports were in RUN at 802–803 Hz CMD 41 (mean 802.2), with 0 CRC errors, 0 gaps (dt above 2.5 ms), 0 UART ring overflows and 0 IMU queue drops. So the TM210 skipped no samples on its UART, unlike the packets lost over USB on miniPi and the PC. INSLIB's longest update over the run was 235 µs. QoS reached 5.
 
 **Still to do:**
-1. **UART link:** 800 ± 20 Hz CMD 41 at 921600 with zero CRC errors over 10 minutes.
+1. ~~**UART link:** 800 ± 20 Hz CMD 41 at 921600 with zero CRC errors over 10 minutes.~~ Passed on 2026-11-13 (above).
 2. **Factory-default TM210:** provisioning from 115200 passed on 2026-11-13 (above), starting from the settings this unit shipped with. Still to do: a unit really at factory defaults, and the web page showing the `power-cycle` message.
 3. **Power-cycle:** the fast path passes and there is no flash write (passed once, 2026-11-13). A flash commit at 921600 (bit 18 = 1) has not yet been exercised by our code.
 4. **Mismatch:** turn RPY on in ImuAssistant and save. On the next boot it is detected and corrected.
