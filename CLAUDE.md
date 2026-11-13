@@ -23,7 +23,7 @@ The target system (see `plans/README.md` for the index):
 
 ## Firmware layout and build
 
-- `firmware/CMakeLists.txt` is the project (board `pico2_w`, flash binary with the core 1 path in SRAM through the linker override in `firmware/link/`; stdio on USB only, because UART0 is the TM210). After a build, `python firmware/tools/check_ram_path.py` must report nothing reachable from core 1 or the ISRs in flash; when core 1 starts calling a new SDK or libc function, add its file to `firmware/link/default_text_excludes.incl`.
+- `firmware/CMakeLists.txt` is the project (board `pico2_w`, flash binary with the core 1 path in SRAM through the linker override in `firmware/link/`; stdio on USB only, because UART0 is the TM210). After a build, `python firmware/tools/check_ram_path.py firmware/build/app.dis` (run from the repo root; it defaults to `build/app.dis`, relative to `firmware/`) must report nothing reachable from core 1 or the ISRs in flash; when core 1 starts calling a new SDK or libc function, add its file to `firmware/link/default_text_excludes.incl`.
 - `firmware/app/`: `main.c` (core 0 loop and the 1 Hz status report), `nav_core1.c` (the filter on core 1 and its queues), `app_config.h` (mounting, noise figures, options).
 - **Every pin, bus instance and baud rate is in `firmware/app/board_pins.h`.** No other file names a GPIO number; drivers get their pins through their config structs.
 - `firmware/drivers/`: `uart_dma` (DMA ring receive, polled transmit), `tm210` and `um980` (parser plus boot check/provision state machine each; `um980` drives both the UM980 and the UM982), `bmp581`, `inslib` (CMake wrapper around `external/INSLIB`).
