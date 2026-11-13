@@ -77,6 +77,10 @@ class Port:
         attr[2] |= termios.CLOCAL | termios.CREAD
         termios.tcsetattr(self.fd, termios.TCSANOW, attr)
         termios.tcflush(self.fd, termios.TCIOFLUSH)
+        # O_NONBLOCK was only for the open (no wait for carrier). Reads wait
+        # in select(), and a non-blocking write fails with EAGAIN as soon as
+        # the USB transmit buffer is busy.
+        os.set_blocking(self.fd, True)
 
     def read(self):
         if self.ser is not None:
