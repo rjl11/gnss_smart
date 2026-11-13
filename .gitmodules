@@ -4,3 +4,6 @@
 [submodule "external/BMP5_SensorAPI"]
 	path = external/BMP5_SensorAPI
 	url = https://github.com/boschsensortec/BMP5_SensorAPI
+[submodule "external/Adafruit_BMP5xx"]
+	path = external/Adafruit_BMP5xx
+	url = https://github.com/adafruit/Adafruit_BMP5xx

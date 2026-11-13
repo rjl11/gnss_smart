@@ -51,6 +51,7 @@ git submodule update --init --recursive
 
 - `external/INSLIB`: the navigation filter. It has its own `Makefile`, tests, `coding_style.md` and requirement docs (`requirements/`). Plans cite its headers (`src/nav_suite.h`, `src/ins.h`) as the source of truth.
 - `external/BMP5_SensorAPI`: Bosch BMP5 driver.
+- `external/Adafruit_BMP5xx`: Adafruit's Arduino library for the BMP580/581/585, kept only as a usage reference for `firmware/drivers/bmp581` (setup order, oversampling/ODR/IIR settings, interrupt config in `src/Adafruit_BMP5xx.cpp` and `examples/`). It is not compiled: its `src/` carries its own copy of Bosch's `bmp5.c`, which would clash with `external/BMP5_SensorAPI`.
 
 Not a submodule: `external/syd_dynamics` is a plain vendored copy of SYD Dynamics' TransducerM examples and the TM210 3D model. It is the EasyProfile protocol reference for the TM210 (see its `README.md`), and it is not compiled. `temp/` is git-ignored scratch space.
 
