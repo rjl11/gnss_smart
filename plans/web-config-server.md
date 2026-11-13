@@ -37,6 +37,14 @@ A cmake option `WEB_MODE` selects it, passed to the code as `APP_WEB_MODE` in `a
 - cmake: `-DWEB_MODE=always|off`, `-DWIFI_STA_SSID=...`, `-DWIFI_STA_PASSWORD=...` (empty = open).
 - Size (measured): flash 147 KB code + 251 KB constants (mostly the Wi-Fi firmware); SRAM 119 KB `.data` + 128 KB `.bss` = 247 KB of 520 KB. `check_ram_path.py`: still nothing reachable from core 1 or the ISRs in flash.
 
+**Bench results (2026-11-13, bare Pico 2 W on USB, no sensors wired):**
+- The flash image boots and runs. `[web] init done in 860 ms` (CYW43439 firmware load, blocking, before the sensor UARTs start). Joined `TeliaGateway` (open) about 3 s later at RSSI around −50 dBm, DHCP address 192.168.1.52; no drops over the test.
+- From a PC on the same network: `/` is 3457 B in about 8–30 ms, `/status.json` about 700 B. 60 sequential requests at 5 Hz: 60 × 200, worst 0.21 s. 6 parallel requests: all 200 (the pool has 3 JSON buffers, so the transfers were short enough to never overlap more than that). The JSON parses as valid, with `null` for the missing sensor values.
+- The page in a browser updates every second and shows the missing sensors in red.
+- `gnss-smart.local` resolves on Windows 10 (`ping`), `Resolve-DnsName` doesn't use mDNS. Not tried on Android yet.
+- One unexplained miss: the very first `Invoke-WebRequest` from PowerShell to both URLs timed out after the TCP connection opened; every request after that (curl, PowerShell, browser) worked. Watch for it again.
+- **Not tested yet, needs the sensors:** core 1 `update_us_max` against the old `copy_to_ram` build, and the ring-overflow counters with the IMU at 800 Hz while the page polls. With no data flowing, the counters staying at 0 says nothing. Also still open: re-join after a router power-cycle.
+
 ### Open access point `gnss_smart` (Phase 3)
 - `cyw43_arch_enable_ap_mode("gnss_smart", NULL, CYW43_AUTH_OPEN)`, fixed address 192.168.4.1/24. Open, with no password, by decision (see "Security").
 - Needs the small DHCP server from pico-examples (`pico_w/wifi/access_point/dhcpserver`), and optionally its DNS server so any hostname resolves to the device. Copy them into `firmware/drivers/` with their licence.
