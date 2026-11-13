@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gnss_smart status</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--fg:#1c1f24;--dim:#6b7280;--line:#e3e6ea;--ok:#15803d;--bad:#b91c1c}
+@media (prefers-color-scheme:dark){:root{--bg:#111316;--card:#1b1e23;--fg:#e6e8eb;--dim:#9aa1ab;--line:#2b2f36;--ok:#4ade80;--bad:#f87171}}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:12px}
+h1{font-size:18px;margin:0}
+#age{color:var(--dim)}
+#age.bad{color:var(--bad);font-weight:600}
+main{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:0 0 6px}
+table{width:100%;border-collapse:collapse}
+td{padding:2px 0;vertical-align:top;border-top:1px solid var(--line)}
+tr:first-child td{border-top:0}
+td:first-child{color:var(--dim);width:40%;padding-right:8px}
+td:last-child{font-variant-numeric:tabular-nums;word-break:break-word}
+.bad{color:var(--bad);font-weight:600}
+.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<header><h1>gnss_smart</h1><span id="age">connecting…</span></header>
+<main id="main"></main>
+<script>
+"use strict";
+const TITLES={wifi:"Wi-Fi",imu:"IMU (TM210)",gnss:"GNSS",heading:"GNSS heading",baro:"Barometer (BMP581)",nav:"Filter (INSLIB)",rx_overflows:"UART ring overflows"};
+let last=0;
+function fmt(v){
+  if(v===null||v===undefined)return"—";
+  if(Array.isArray(v))return v.map(fmt).join("  ");
+  if(typeof v==="object")return Object.entries(v).map(([k,x])=>k+" "+fmt(x)).join(", ");
+  if(typeof v==="boolean")return v?"yes":"no";
+  return String(v);
+}
+function cls(k,v){
+  if(k==="error")return v&&v!=="ok"?"bad":"";
+  if(k==="dual_refused")return v?"bad":"";
+  if(k==="state")return /error|fail/.test(v)?"bad":(v==="run"||v==="running"||v==="up"?"ok":"");
+  return"";
+}
+function render(d){
+  const m=document.getElementById("main");
+  m.textContent="";
+  for(const [sec,obj] of Object.entries(d)){
+    if(obj===null||typeof obj!=="object"||Array.isArray(obj))continue;
+    const s=document.createElement("section");
+    const h=document.createElement("h2");
+    h.textContent=TITLES[sec]||sec;
+    s.appendChild(h);
+    const t=document.createElement("table");
+    for(const [k,v] of Object.entries(obj)){
+      const r=t.insertRow();
+      r.insertCell().textContent=k.replace(/_/g," ");
+      const c=r.insertCell();
+      c.textContent=fmt(v);
+      const x=cls(k,v);
+      if(x)c.className=x;
+    }
+    s.appendChild(t);
+    m.appendChild(s);
+  }
+  const top=[];
+  if(d.fw)top.push(d.fw);
+  if(d.uptime_s!==undefined)top.push("up "+d.uptime_s+" s");
+  document.querySelector("h1").textContent="gnss_smart"+(top.length?" · "+top.join(" · "):"");
+}
+async function poll(){
+  try{
+    const r=await fetch("/status.json",{cache:"no-store"});
+    if(r.ok){render(await r.json());last=Date.now();}
+  }catch(e){}
+  const a=document.getElementById("age");
+  const s=last?(Date.now()-last)/1000:Infinity;
+  a.textContent=last?(s<2.5?"live":"no update for "+Math.round(s)+" s"):"connecting…";
+  a.className=s<2.5?"":"bad";
+  setTimeout(poll,1000);
+}
+poll();
+</script>
+</body>
+</html>

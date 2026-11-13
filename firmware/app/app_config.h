@@ -65,6 +65,25 @@
  * (start value, not yet measured). */
 #define APP_BARO_MAX_AGE_US         100000
 
+/* When Wi-Fi and the web server run (plans/web-config-server.md, "When
+ * Wi-Fi runs"). Set at build time with cmake -DWEB_MODE=always|off; switch
+ * (GPIO22 at boot) is Phase 5. The station SSID and password come from cmake
+ * too (WIFI_STA_SSID, WIFI_STA_PASSWORD; an empty password means an open
+ * network). */
+#define APP_WEB_OFF                 0
+#define APP_WEB_ALWAYS              1
+#ifndef APP_WEB_MODE
+#define APP_WEB_MODE                APP_WEB_OFF
+#endif
+#ifndef APP_WIFI_STA_SSID
+#define APP_WIFI_STA_SSID           "TeliaGateway"
+#endif
+#ifndef APP_WIFI_STA_PASSWORD
+#define APP_WIFI_STA_PASSWORD       ""
+#endif
+/* DHCP and mDNS name: http://gnss-smart.local/ where mDNS resolves. */
+#define APP_WEB_HOSTNAME            "gnss-smart"
+
 /* Core 1 stack. nav_suite_update() needs about 13 KB worst case. */
 #define APP_CORE1_STACK_BYTES       (32 * 1024)
 

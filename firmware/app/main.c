@@ -5,6 +5,10 @@
  * provisioning, the BMP581, and a status report on USB once a second.
  * Core 1 (nav_core1.c): the INSLIB nav_suite filter.
  *
+ * Wi-Fi and the web server (app/web/) run when built with WEB_MODE=always:
+ * station on APP_WIFI_STA_SSID, status page with /status.json
+ * (plans/web-config-server.md, Phase 2).
+ *
  * No Bluetooth in this build. Pins are in board_pins.h, other settings in
  * app_config.h.
  */
@@ -20,6 +24,10 @@
 #include "tm210.h"
 #include "uart_dma.h"
 #include "um980.h"
+#if APP_WEB_MODE == APP_WEB_ALWAYS
+#include "web/jsonw.h"
+#include "web/web.h"
+#endif
 
 #define IMU_RX_BITS         13 /* 8 KB, about 200 ms at 39 kB/s */
 #define GNSS_RX_BITS        12 /* 4 KB */
@@ -181,17 +189,39 @@ static const char *fix_name(uint32_t pos_type)
     }
 }
 
-static void print_status(uint64_t now)
+static const char *model_name(void)
+{
+    switch (um980_model(&s_gnss)) {
+    case 0:                    return NULL;
+    case UM980_PRODUCT_UM980:  return "UM980";
+    case UM980_PRODUCT_UM982:  return "UM982";
+    default:                   return "other";
+    }
+}
+
+static void print_status(uint64_t now, uint32_t baro_hz)
 {
     const tm210_stats_t *is = tm210_stats(&s_imu);
     const um980_stats_t *gs = um980_stats(&s_gnss);
     const bmp581_stats_t *bs = bmp581_stats(&s_baro);
-    static uint32_t s_baro_prev;
     nav_output_t o;
 
     nav_get_output(&o);
 
     printf("\n--- t=%.1f s ---\n", (double)now * 1e-6);
+
+#if APP_WEB_MODE == APP_WEB_ALWAYS
+    web_info_t wi;
+    web_get_info(&wi);
+    const uint8_t *ip = (const uint8_t *)&wi.ip;
+    printf("WIFI  %-15s %s", web_state_name(wi.state), APP_WIFI_STA_SSID);
+    if (wi.state == WEB_WIFI_UP) {
+        printf("  http://%u.%u.%u.%u/  %ld dBm", ip[0], ip[1], ip[2], ip[3], (long)wi.rssi_dbm);
+    } else if (wi.state == WEB_WIFI_WAIT_RETRY) {
+        printf("  retry in %lu s", (unsigned long)wi.retry_in_s);
+    }
+    printf("  joins %lu  drops %lu\n", (unsigned long)wi.joins, (unsigned long)wi.drops);
+#endif
 
     printf("IMU   %-15s %4lu Hz  crc %lu  gaps %lu  ", tm210_state_name(tm210_state(&s_imu)),
            (unsigned long)is->rate_hz, (unsigned long)is->crc_errors, (unsigned long)is->gaps);
@@ -211,10 +241,8 @@ static void print_status(uint64_t now)
     printf("GNSS  %-15s %4lu Hz  crc %lu  pps %lu", um980_state_name(um980_state(&s_gnss)),
            (unsigned long)gs->nav_rate_hz, (unsigned long)gs->crc_errors,
            (unsigned long)gs->pps_edges);
-    if (um980_model(&s_gnss) != 0) {
-        printf("  %s build %lu", um980_model(&s_gnss) == UM980_PRODUCT_UM980 ? "UM980" :
-               um980_model(&s_gnss) == UM980_PRODUCT_UM982 ? "UM982" : "other",
-               (unsigned long)s_gnss.build);
+    if (model_name() != NULL) {
+        printf("  %s build %lu", model_name(), (unsigned long)s_gnss.build);
         printf("  %s antenna", um980_dual(&s_gnss) ? "dual" : "single");
     }
     if (um980_last_error(&s_gnss) != UM980_OK) {
@@ -246,9 +274,8 @@ static void print_status(uint64_t now)
 
     if (s_baro_ok) {
         printf("BARO  run             %4lu Hz  i2c errors %lu  %.1f Pa  %.1f C\n",
-               (unsigned long)(bs->samples - s_baro_prev), (unsigned long)bs->i2c_errors,
+               (unsigned long)baro_hz, (unsigned long)bs->i2c_errors,
                (double)s_last_baro.pressure_pa, (double)s_last_baro.temperature_c);
-        s_baro_prev = bs->samples;
     } else {
         printf("BARO  not found\n");
     }
@@ -288,6 +315,188 @@ static void print_status(uint64_t now)
     }
 }
 
+#if APP_WEB_MODE == APP_WEB_ALWAYS
+static void jw_vec3(jw_t *w, const char *key, const float *v, int decimals)
+{
+    jw_arr(w, key);
+    for (int i = 0; i < 3; i++) {
+        jw_num(w, NULL, (double)v[i], decimals);
+    }
+    jw_end(w, ']');
+}
+
+/* The same data as print_status(), as JSON for /status.json. */
+static void publish_status_json(uint64_t now, uint32_t baro_hz)
+{
+    static char buf[2048];
+    const tm210_stats_t *is = tm210_stats(&s_imu);
+    const um980_stats_t *gs = um980_stats(&s_gnss);
+    const bmp581_stats_t *bs = bmp581_stats(&s_baro);
+    nav_output_t o;
+    web_info_t wi;
+    jw_t w;
+
+    nav_get_output(&o);
+    web_get_info(&wi);
+    jw_init(&w, buf, sizeof buf);
+    jw_obj(&w, NULL);
+    jw_str(&w, "fw", "gnss_smart demo");
+    jw_int(&w, "uptime_s", (long long)(now / 1000000u));
+
+    char ip[16];
+    const uint8_t *b = (const uint8_t *)&wi.ip;
+    snprintf(ip, sizeof ip, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+    jw_obj(&w, "wifi");
+    jw_str(&w, "state", web_state_name(wi.state));
+    jw_str(&w, "ssid", APP_WIFI_STA_SSID);
+    jw_str(&w, "ip", ip);
+    if (wi.state == WEB_WIFI_UP) {
+        jw_int(&w, "rssi_dbm", wi.rssi_dbm);
+    } else {
+        jw_null(&w, "rssi_dbm");
+    }
+    jw_int(&w, "joins", wi.joins);
+    jw_int(&w, "drops", wi.drops);
+    jw_int(&w, "http_busy", wi.http_busy);
+    jw_end(&w, '}');
+
+    jw_obj(&w, "imu");
+    jw_str(&w, "state", tm210_state_name(tm210_state(&s_imu)));
+    jw_str(&w, "error", tm210_last_error(&s_imu) == TM210_OK ? "ok" :
+                        tm210_strerror(tm210_last_error(&s_imu)));
+    jw_int(&w, "rate_hz", is->rate_hz);
+    jw_int(&w, "crc_errors", is->crc_errors);
+    jw_int(&w, "gaps", is->gaps);
+    if (is->status_valid) {
+        jw_num(&w, "temp_c", (double)is->temperature_c, 1);
+        jw_int(&w, "qos", is->qos);
+    } else {
+        jw_null(&w, "temp_c");
+        jw_null(&w, "qos");
+    }
+    if (tm210_state(&s_imu) == TM210_ST_RUN) {
+        jw_vec3(&w, "acc_mps2", s_last_imu.acc, 3);
+        jw_vec3(&w, "gyr_rps", s_last_imu.gyr, 4);
+    }
+    jw_end(&w, '}');
+
+    jw_obj(&w, "gnss");
+    jw_str(&w, "state", um980_state_name(um980_state(&s_gnss)));
+    jw_str(&w, "error", um980_last_error(&s_gnss) == UM980_OK ? "ok" :
+                        um980_strerror(um980_last_error(&s_gnss)));
+    jw_int(&w, "rate_hz", gs->nav_rate_hz);
+    jw_int(&w, "crc_errors", gs->crc_errors);
+    jw_int(&w, "pps_edges", gs->pps_edges);
+    if (model_name() != NULL) {
+        jw_str(&w, "model", model_name());
+        jw_int(&w, "build", (long long)s_gnss.build);
+        jw_str(&w, "antenna", um980_dual(&s_gnss) ? "dual" : "single");
+    } else {
+        jw_null(&w, "model");
+    }
+    jw_bool(&w, "dual_refused", um980_dual_refused(&s_gnss));
+    if (s_have_nav) {
+        jw_str(&w, "fix", fix_name(s_last_nav.pos_type));
+        jw_int(&w, "sv_used", s_last_nav.n_used);
+        jw_int(&w, "sv_tracked", s_last_nav.n_tracked);
+        if (gs->dop_valid) {
+            jw_num(&w, "hdop", (double)gs->hdop, 1);
+        } else {
+            jw_null(&w, "hdop");
+        }
+        jw_num(&w, "age_s", (double)s_last_nav.diff_age_s, 1);
+        jw_str(&w, "time_from", s_last_nav.t_from_pps ? "pps" : "arrival");
+        if (s_last_nav.pos_usable) {
+            jw_num(&w, "lat_deg", s_last_nav.lat_deg, 8);
+            jw_num(&w, "lon_deg", s_last_nav.lon_deg, 8);
+            jw_num(&w, "h_ell_m", s_last_nav.hgt_msl_m + (double)s_last_nav.undulation_m, 3);
+            float sd[3] = { s_last_nav.sd_lat_m, s_last_nav.sd_lon_m, s_last_nav.sd_hgt_m };
+            jw_vec3(&w, "sd_m", sd, 3);
+        }
+    }
+    jw_end(&w, '}');
+
+    if (um980_dual(&s_gnss) && s_have_hdg) {
+        jw_obj(&w, "heading");
+        jw_num(&w, "heading_deg", (double)s_last_hdg.heading_deg, 2);
+        jw_num(&w, "sd_deg", (double)s_last_hdg.sd_heading_deg, 2);
+        jw_num(&w, "pitch_deg", (double)s_last_hdg.pitch_deg, 2);
+        jw_str(&w, "fix", fix_name(s_last_hdg.pos_type));
+        jw_num(&w, "baseline_m", (double)s_last_hdg.length_m, 3);
+        jw_num(&w, "median_m", (double)s_base_median_m, 3);
+        jw_int(&w, "used", s_hdg_used);
+        jw_int(&w, "gated", s_hdg_gated);
+        jw_end(&w, '}');
+    }
+
+    jw_obj(&w, "baro");
+    jw_bool(&w, "found", s_baro_ok);
+    if (s_baro_ok) {
+        jw_int(&w, "rate_hz", baro_hz);
+        jw_int(&w, "i2c_errors", bs->i2c_errors);
+        jw_num(&w, "pressure_pa", (double)s_last_baro.pressure_pa, 1);
+        jw_num(&w, "temp_c", (double)s_last_baro.temperature_c, 1);
+    }
+    jw_end(&w, '}');
+
+    jw_obj(&w, "nav");
+    if (o.t_us == 0) {
+        jw_str(&w, "mode", "starting");
+    } else {
+        jw_str(&w, "mode", nav_mode_name(o.mode));
+        jw_str(&w, "antenna", o.dual ? "dual" : "single");
+        jw_int(&w, "update_mean_us", o.update_us_mean);
+        jw_int(&w, "update_max_us", o.update_us_max);
+        jw_int(&w, "stack_used_b", nav_stack_used());
+        jw_int(&w, "stack_size_b", nav_stack_size());
+        jw_int(&w, "queue_drops", nav_queue_drops());
+        if (o.rpy_valid) {
+            float rpy[3] = { (float)(o.rpy_rad[0] * DEG), (float)(o.rpy_rad[1] * DEG),
+                             (float)(o.rpy_rad[2] * DEG) };
+            jw_vec3(&w, "rpy_deg", rpy, 2);
+            jw_bool(&w, "standing_still", o.zaru_active);
+        }
+        if (o.pos_valid) {
+            jw_num(&w, "lat_deg", o.llh[0] * DEG, 8);
+            jw_num(&w, "lon_deg", o.llh[1] * DEG, 8);
+            jw_num(&w, "h_ell_m", o.llh[2], 3);
+        }
+        if (o.vel_valid) {
+            jw_vec3(&w, "vel_ned_mps", o.vel_ned, 3);
+        }
+        if (o.height_valid) {
+            jw_num(&w, "height_above_start_m", (double)o.height_m, 2);
+        }
+        if (o.bias_valid) {
+            jw_vec3(&w, "gyr_bias_rps", o.gyr_bias, 5);
+            jw_vec3(&w, "acc_bias_mps2", o.acc_bias, 4);
+        }
+        jw_obj(&w, "epochs");
+        jw_int(&w, "imu", o.n_updates);
+        jw_int(&w, "gnss", o.n_gnss);
+        jw_int(&w, "gnss_late", o.n_gnss_late);
+        jw_int(&w, "yaw", o.n_yaw);
+        jw_int(&w, "baro", o.n_baro);
+        jw_int(&w, "baro_late", o.n_baro_late);
+        jw_end(&w, '}');
+    }
+    jw_end(&w, '}');
+
+    jw_obj(&w, "rx_overflows");
+    jw_int(&w, "imu", s_imu_port.rx_overflows);
+    jw_int(&w, "gnss", s_gnss_port.rx_overflows);
+    jw_end(&w, '}');
+
+    jw_end(&w, '}');
+    if (!jw_ok(&w)) {
+        static const char k_err[] = "{\"error\":\"status JSON too long\"}";
+        web_set_status_json(k_err, sizeof k_err - 1);
+        return;
+    }
+    web_set_status_json(buf, w.len);
+}
+#endif
+
 int main(void)
 {
     stdio_init_all();
@@ -298,6 +507,19 @@ int main(void)
         sleep_ms(10);
     }
     printf("\ngnss_smart demo: TM210 + UM980 + BMP581 -> INSLIB nav_suite\n");
+
+#if APP_WEB_MODE == APP_WEB_ALWAYS
+    /* Before the sensor UARTs start: loading the CYW43439 firmware blocks for
+     * a few hundred ms, longer than the IMU ring holds. The join itself runs
+     * in the background from web_poll(). */
+    const web_config_t web_cfg = {
+        .ssid = APP_WIFI_STA_SSID, .password = APP_WIFI_STA_PASSWORD, .hostname = APP_WEB_HOSTNAME,
+    };
+    uint64_t t_web = time_us_64();
+    bool web_ok = web_init(&web_cfg);
+    printf("[web] init %s in %lu ms\n", web_ok ? "done" : "failed",
+           (unsigned long)((time_us_64() - t_web) / 1000u));
+#endif
 
     if (!uart_dma_init(&s_imu_port, PIN_TM210_UART, PIN_TM210_TX, PIN_TM210_RX, TM210_BAUD,
                        s_imu_rx, IMU_RX_BITS) ||
@@ -389,8 +611,19 @@ int main(void)
             printf("[inslib] %s\n", msg);
         }
 
+#if APP_WEB_MODE == APP_WEB_ALWAYS
+        web_poll(now);
+#endif
+
         if (now >= next_status) {
-            print_status(now);
+            static uint32_t s_baro_prev;
+            uint32_t baro_hz = bmp581_stats(&s_baro)->samples - s_baro_prev;
+            s_baro_prev = bmp581_stats(&s_baro)->samples;
+
+            print_status(now, baro_hz);
+#if APP_WEB_MODE == APP_WEB_ALWAYS
+            publish_status_json(now, baro_hz);
+#endif
             next_status += STATUS_PERIOD_US;
         }
     }

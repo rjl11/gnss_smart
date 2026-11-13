@@ -12,7 +12,7 @@ A cmake option `WEB_MODE` selects it, passed to the code as `APP_WEB_MODE` in `a
 
 | `WEB_MODE` | Behaviour |
 |---|---|
-| `always` (development default) | Wi-Fi and the web server start at boot, after the sensors and core 1 are up, and stay on. |
+| `always` (development default) | Wi-Fi and the web server start at boot and stay on. `web_init()` runs before the sensor UARTs start, because loading the CYW43439 firmware blocks for a few hundred ms, longer than the IMU ring holds; the join then runs in the background. |
 | `switch` (production, later) | GPIO22 (internal pull-up, switch or jumper to GND, low = web on) is read once at boot. Changing mode means flipping the switch and resetting. The pin is already reserved as `PIN_WEB_MODE_SWITCH` in `firmware/app/board_pins.h`. |
 | `off` | No Wi-Fi code linked in. |
 
@@ -28,6 +28,14 @@ A cmake option `WEB_MODE` selects it, passed to the code as `APP_WEB_MODE` in `a
   - The USB status report prints the Wi-Fi state and IP address every second.
   - DHCP hostname `gnss-smart`, so it shows by name in the router's lease list.
   - lwIP mDNS (`LWIP_MDNS_RESPONDER`) as `gnss-smart.local`. Many Android browsers don't resolve `.local`, so the IP from USB or the router stays the fallback.
+
+**Implemented (2026-11-13), build-checked, not yet run on hardware:**
+- `firmware/app/web/web.c`: `web_init()` (CYW43 init, station mode, hostname, httpd, mDNS with an `_http._tcp` service), `web_poll()` (join timeout 30 s, retry backoff 5 → 10 → 20 → 30 s, RSSI every 2 s, LED), `web_set_status_json()`.
+- `/status.json` is an httpd custom file (`LWIP_HTTPD_CUSTOM_FILES`). The main loop builds the JSON once a second (`publish_status_json()` in `main.c`, the same data as the USB report) with the small writer in `app/web/jsonw.c`, which writes `null` for NaN so the JSON stays valid. Each request gets its own copy from a pool of 3 × 2 KB, so a transfer never sees a half-new text; a fourth concurrent request gets a 404 and counts as `http_busy`. `HTTP_IS_DATA_VOLATILE` is forced to copy, because httpd closes the file before TCP has the data acknowledged.
+- `app/web/www/index.html` is compiled in with `pico_set_lwip_httpd_content()`. It polls `/status.json` every second and draws one card per JSON section, so new fields show up without a page change. It marks the page "no update for N s" when polling stops.
+- `app/lwipopts.h`: 16 KB lwIP heap, 16 pbufs, TCP window 4 × MSS.
+- cmake: `-DWEB_MODE=always|off`, `-DWIFI_STA_SSID=...`, `-DWIFI_STA_PASSWORD=...` (empty = open).
+- Size (measured): flash 147 KB code + 251 KB constants (mostly the Wi-Fi firmware); SRAM 119 KB `.data` + 128 KB `.bss` = 247 KB of 520 KB. `check_ram_path.py`: still nothing reachable from core 1 or the ISRs in flash.
 
 ### Open access point `gnss_smart` (Phase 3)
 - `cyw43_arch_enable_ap_mode("gnss_smart", NULL, CYW43_AUTH_OPEN)`, fixed address 192.168.4.1/24. Open, with no password, by decision (see "Security").
