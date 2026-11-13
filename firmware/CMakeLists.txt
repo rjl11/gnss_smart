@@ -61,9 +61,14 @@ target_link_libraries(app PRIVATE
     inslib
 )
 
-# The whole image runs from SRAM, so the filter's timing does not depend on
-# the XIP cache (plans/rp2350-feasibility.md, risk 4).
-pico_set_binary_type(app copy_to_ram)
+# Default flash (XIP) binary. A whole-image copy_to_ram build won't fit once
+# the CYW43 Wi-Fi firmware and lwIP are linked in, so only the core 1 filter
+# path (INSLIB, nav_core1.c and the SDK calls it makes) goes to SRAM, through
+# the linker-script override in link/. The timestamping ISRs are marked
+# __not_in_flash_func in their drivers. See plans/web-config-server.md,
+# "Memory layout", and check with tools/check_ram_path.py.
+pico_add_linker_script_override_path(app ${CMAKE_CURRENT_LIST_DIR}/link
+    FILES default_text_excludes.incl default_rodata_excludes.incl)
 
 # Debug output on USB CDC. UART0 is the TM210, so stdio must never use it.
 pico_enable_stdio_usb(app 1)

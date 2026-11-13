@@ -90,7 +90,8 @@ static uint32_t crc32(const uint8_t *p, size_t n)
 
 /* ---- PPS --------------------------------------------------------------- */
 
-static void pps_irq(void)
+/* In SRAM, so the edge timestamp doesn't wait on an XIP cache miss. */
+static void __not_in_flash_func(pps_irq)(void)
 {
     if (gpio_get_irq_event_mask((unsigned)s_pps_pin) & GPIO_IRQ_EDGE_RISE) {
         gpio_acknowledge_irq((unsigned)s_pps_pin, GPIO_IRQ_EDGE_RISE);

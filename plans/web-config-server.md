@@ -47,10 +47,13 @@ The same pages could also be served over the W5500 (ioLibrary has a small HTTP s
 ## Memory layout
 The demo firmware is built `copy_to_ram`: the whole image runs from SRAM. Today that is 185 KB of code plus 70 KB of bss out of 520 KB (from `arm-none-eabi-size app.elf`, 2026-11-13). The CYW43439 Wi-Fi firmware alone is about 225 KB, and lwIP, httpd, their buffers and later BTstack come on top (estimate, not yet measured), so that doesn't fit.
 
-Decision: build the **default flash (XIP) binary**, and put only the timing-critical code in SRAM:
-- The core 1 loop in `nav_core1.c` and the INSLIB call tree under `nav_suite_update()`. The INSLIB library is compiled with `-ffunction-sections` and its sections are placed in RAM (a linker-script section or a per-file `.time_critical` placement). `__not_in_flash_func` alone covers only the entry points.
-- The ISRs and DMA-complete handlers that take sample timestamps: UART DMA, PPS edge, BMP581 INT.
-- Check: grep `app.dis` for flash addresses (`0x10xxxxxx`) called from the hot path, and compare core 1's `update_us_max` (already in `nav_output_t`) against the `copy_to_ram` build on the same bench run.
+Decision: build the **default flash (XIP) binary**, and put only the timing-critical code in SRAM. Done in Phase 1 (2026-11-13), build-checked, not yet run on hardware:
+- **How:** `firmware/link/` overrides two Pico SDK linker fragments, `default_text_excludes.incl` and `default_rodata_excludes.incl`, through `pico_add_linker_script_override_path()` in `firmware/CMakeLists.txt`. Every input file excluded there leaves flash and is caught by the `*(.text*)` / `*(.rodata*)` catch-all in the SDK's `.data` section, which crt0 copies to SRAM. No vendor source is changed.
+- **What goes to SRAM:** `libinslib.a` and `nav_core1.c` (the core 1 loop and everything under `nav_suite_update()`), the SDK files the loop calls (`queue.c`, `critical_section.c`, `hardware_timer/timer.c`), the SDK's `pico_double` (DCP) and `pico_float` math wrappers that INSLIB's arithmetic and libm calls resolve to, `pico_printf/printf.c` (INSLIB logs through `snprintf` from inside the update), and newlib's `memcpy` / `memset` / `memmove` (they come from `libg.a`). libgcc and libm stay in SRAM as in the SDK default.
+- **ISRs:** `pps_irq` (um980) and `bmp581_irq0/1` are `__not_in_flash_func`. The UART receive has no ISR (DMA ring, polled), so nothing to move there.
+- **Check:** `python firmware/tools/check_ram_path.py` follows the direct calls in `build/app.dis` from `core1_main` and the ISRs (veneers included, calls through function pointers not) and lists anything reachable in flash. Result: 214 functions reachable, none in flash, the same 214 as the old `copy_to_ram` build.
+- **Size (measured, `arm-none-eabi-size -A`):** flash `.text` 60 KB + `.rodata` 7 KB; SRAM `.data` 118 KB (mostly the code above) + `.bss` 68 KB = 186 KB, down from 255 KB with `copy_to_ram`.
+- **Still open:** compare core 1's `update_us_max` (already in `nav_output_t`) against the `copy_to_ram` build on the bench. Core 0 code now runs from flash, so its loop is a little slower on a cache miss; watch the IMU/GNSS ring-overflow counters.
 
 This replaces the `copy_to_ram` option in [rp2350-feasibility.md](rp2350-feasibility.md), risk 4.
 

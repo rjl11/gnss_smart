@@ -1,0 +1,19 @@
+/* gnss_smart: code that runs from SRAM in the flash (XIP) build.
+ *
+ * Overrides the Pico SDK file of the same name (pico_standard_link). Every
+ * input file excluded here leaves flash .text and is picked up by the
+ * catch-all *(.text*) in .data, which is copied to SRAM at boot.
+ *
+ * - libgcc.a, libm.a: as in the SDK default.
+ * - libinslib.a and nav_core1.c: the core 1 filter loop and everything under
+ *   nav_suite_update() (plans/web-config-server.md, "Memory layout").
+ * - queue.c, critical_section.c, timer.c: SDK calls made by the core 1 loop
+ *   (queue_try_remove, the output lock, time_us_64).
+ * - pico_double, pico_float: the SDK's double (DCP) and float math wrappers
+ *   that INSLIB's arithmetic and libm calls resolve to.
+ * - printf.c: INSLIB logs from inside nav_suite_update() through snprintf.
+ * - memcpy / memset / memmove from the C library (newlib's libg.a or libc.a).
+ *
+ * Check with firmware/tools/check_ram_path.py after a build.
+ */
+*(EXCLUDE_FILE(*libgcc.a: *libm.a: *libinslib.a: *nav_core1.c.obj *queue.c.obj *critical_section.c.obj *hardware_timer/timer.c.obj *pico_double/*.obj *pico_float/*.obj *pico_printf/printf.c.obj *libg.a:*memcpy*.o *libg.a:*memset*.o *libg.a:*memmove*.o *libc.a:*memcpy*.o *libc.a:*memset*.o *libc.a:*memmove*.o) .text*)

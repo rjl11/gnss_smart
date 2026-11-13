@@ -71,7 +71,9 @@ static void bmp581_delay_us(uint32_t period, void *intf_ptr)
  * (W5500 INT, GNSS PPS) instead of taking over the single gpio callback. */
 static bmp581_t *s_irq_dev[BMP581_MAX_DEVICES];
 
-static inline void bmp581_irq_common(unsigned slot)
+/* The handlers run from SRAM, so the INT timestamp doesn't wait on an XIP
+ * cache miss. */
+static __force_inline void bmp581_irq_common(unsigned slot)
 {
     bmp581_t *b = s_irq_dev[slot];
     if (b == NULL) {
@@ -89,9 +91,9 @@ static inline void bmp581_irq_common(unsigned slot)
     }
 }
 
-static void bmp581_irq0(void) { bmp581_irq_common(0); }
+static void __not_in_flash_func(bmp581_irq0)(void) { bmp581_irq_common(0); }
 #if BMP581_MAX_DEVICES > 1
-static void bmp581_irq1(void) { bmp581_irq_common(1); }
+static void __not_in_flash_func(bmp581_irq1)(void) { bmp581_irq_common(1); }
 #endif
 #if BMP581_MAX_DEVICES > 2
 #error "Add more bmp581_irqN handlers for BMP581_MAX_DEVICES > 2"
