@@ -27,7 +27,7 @@ static queue_t s_imu_q, s_gnss_q, s_baro_q, s_log_q;
 static critical_section_t s_out_lock;
 static nav_output_t s_out;                 /* guarded by s_out_lock */
 static volatile nav_antenna_t s_mode;
-static volatile uint32_t s_drops;
+static nav_drops_t s_drops;                /* core 0 only */
 static nav_params_t s_params_new;          /* guarded by s_out_lock */
 static volatile uint32_t s_params_seq;     /* bumped by core 0 on a change */
 
@@ -296,12 +296,12 @@ void nav_start(nav_antenna_t mode, const nav_params_t *params)
     multicore_launch_core1_with_stack(core1_main, s_stack, sizeof s_stack);
 }
 
-static bool push(queue_t *q, const void *item)
+static bool push(queue_t *q, const void *item, uint32_t *drops)
 {
     if (queue_try_add(q, item)) {
         return true;
     }
-    s_drops++;
+    (*drops)++;
     return false;
 }
 
@@ -313,7 +313,7 @@ bool nav_push_imu(const nav_imu_t *s)
     nav_imu_t n = *s;
 
     n.dt_s += s_lost_dt_s;
-    if (push(&s_imu_q, &n)) {
+    if (push(&s_imu_q, &n, &s_drops.imu)) {
         s_lost_dt_s = 0.0f;
         return true;
     }
@@ -321,8 +321,8 @@ bool nav_push_imu(const nav_imu_t *s)
     return false;
 }
 
-bool nav_push_gnss(const nav_gnss_t *s) { return push(&s_gnss_q, s); }
-bool nav_push_baro(const nav_baro_t *s) { return push(&s_baro_q, s); }
+bool nav_push_gnss(const nav_gnss_t *s) { return push(&s_gnss_q, s, &s_drops.gnss); }
+bool nav_push_baro(const nav_baro_t *s) { return push(&s_baro_q, s, &s_drops.baro); }
 
 void nav_set_antenna_mode(nav_antenna_t mode) { s_mode = mode; }
 
@@ -333,7 +333,7 @@ void nav_get_output(nav_output_t *out)
     critical_section_exit(&s_out_lock);
 }
 
-uint32_t nav_queue_drops(void) { return s_drops; }
+void nav_queue_drops(nav_drops_t *out) { *out = s_drops; }
 
 bool nav_pop_log(char *buf, size_t len)
 {

@@ -116,8 +116,17 @@ void nav_set_antenna_mode(nav_antenna_t mode);
 
 void nav_get_output(nav_output_t *out);
 
-/* Samples dropped because a queue to core 1 was full. */
-uint32_t nav_queue_drops(void);
+/* Samples dropped because a queue to core 1 was full, per queue. Core 1
+ * takes GNSS and baro samples only alongside an IMU sample, so GNSS and
+ * baro drops that climb while imu stays flat mean no IMU data is flowing. */
+typedef struct {
+    uint32_t imu;
+    uint32_t gnss;
+    uint32_t baro;
+} nav_drops_t;
+
+/* Core 0 only (the counters are written by the nav_push_*() calls). */
+void nav_queue_drops(nav_drops_t *out);
 
 /* Next INSLIB log message, if any. Print it from core 0. */
 bool nav_pop_log(char *buf, size_t len);

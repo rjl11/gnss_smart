@@ -319,10 +319,14 @@ static void print_status(uint64_t now, uint32_t baro_hz)
     if (o.t_us == 0) {
         printf("NAV   starting\n");
     } else {
-        printf("NAV   %-15s %s  update mean %lu us, max %lu us  stack %lu/%lu B  drops %lu\n",
+        nav_drops_t d;
+        nav_queue_drops(&d);
+        printf("NAV   %-15s %s  update mean %lu us, max %lu us  stack %lu/%lu B\n",
                nav_mode_name(o.mode), o.dual ? "dual" : "single", (unsigned long)o.update_us_mean,
                (unsigned long)o.update_us_max, (unsigned long)nav_stack_used(),
-               (unsigned long)nav_stack_size(), (unsigned long)nav_queue_drops());
+               (unsigned long)nav_stack_size());
+        printf("      queue drops: imu %lu  gnss %lu  baro %lu\n", (unsigned long)d.imu,
+               (unsigned long)d.gnss, (unsigned long)d.baro);
         if (o.rpy_valid) {
             printf("      roll %7.2f  pitch %7.2f  yaw %7.2f deg%s\n", (double)o.rpy_rad[0] * DEG,
                    (double)o.rpy_rad[1] * DEG, (double)o.rpy_rad[2] * DEG,
@@ -487,7 +491,13 @@ static void publish_status_json(uint64_t now, uint32_t baro_hz)
         jw_int(&w, "update_max_us", o.update_us_max);
         jw_int(&w, "stack_used_b", nav_stack_used());
         jw_int(&w, "stack_size_b", nav_stack_size());
-        jw_int(&w, "queue_drops", nav_queue_drops());
+        nav_drops_t d;
+        nav_queue_drops(&d);
+        jw_obj(&w, "queue_drops");
+        jw_int(&w, "imu", d.imu);
+        jw_int(&w, "gnss", d.gnss);
+        jw_int(&w, "baro", d.baro);
+        jw_end(&w, '}');
         jw_int(&w, "reinits", o.n_reinit);
         if (o.rpy_valid) {
             float rpy[3] = { (float)(o.rpy_rad[0] * DEG), (float)(o.rpy_rad[1] * DEG),
