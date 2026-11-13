@@ -25,7 +25,7 @@ Host a small web server on the Pico 2 W's on-board CYW43439 Wi-Fi for configurat
 ## Diagnostics page (read-only)
 - Firmware version, build, uptime, reset reason.
 - Per-sensor: measured rate (IMU 800 Hz, baro 100 Hz, GNSS 20 Hz), packets received, checksum/framing errors, UART overruns, time since last sample.
-- GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset.
+- GNSS: fix type / RTK status, satellites, HDOP, correction age, PPS present and last PPS offset. PPS keeps running for about 30 s after the receiver loses its fix, so "PPS present" doesn't mean a fix. The receiver's PPSSTATUS log (accuracy class, phase error) is a candidate for this line ([gnss-um98x-config.md](gnss-um98x-config.md), "More from the manual (R1.16)").
 - GNSS receiver setup: model (UM980 / UM982), effective antenna mode and, when the setting is dual but a UM980 is fitted, a warning; provisioning state (detecting / checking / provisioning step N / running / error), last error, receiver serial number and firmware build ([gnss-um98x-config.md](gnss-um98x-config.md)). From HWSTATUSB: the receiver temperature, labelled "unconfirmed" until the bench check, and the three core supply voltages, each flagged when it is outside its normal range.
 - TM210 setup: provisioning state, last error, node ID, and the QoS and temperature from the Status object ([imu-tm210-config.md](imu-tm210-config.md)).
 - GNSS heading (dual-antenna mode only): heading solution status and position type, baseline length and its median, heading σ, gated epochs ([gnss-um98x-config.md](gnss-um98x-config.md)).

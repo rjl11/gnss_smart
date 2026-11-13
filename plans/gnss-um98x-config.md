@@ -21,7 +21,7 @@ Decisions fixed by the user:
 - **Dual-antenna heading mode is `CONFIG HEADING VARIABLELENGTH`**: the receiver does not hold the baseline length fixed.
 
 Sources:
-- `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.16.pdf` (Oct. 2026). Section numbers below refer to it. Against R1.15 (Jun. 2026, removed from `docs/`; still in git history), nothing this plan uses changed: the UNIHEADING, HWSTATUS, BESTNAV, PSRVELDRPOS and PPS sections and the position-type values read the same. Three log sections moved: STADOP §7.5.96 → §7.5.98, UNIHEADING §7.5.99 → §7.5.101, and UNILOGLIST §7.5.101 → §7.5.103.
+- `docs/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.16.pdf` (Oct. 2026). Section numbers below refer to it. Against R1.15 (Jun. 2026, removed from `docs/`; still in git history), nothing this plan uses changed: the UNIHEADING, HWSTATUS, BESTNAV, PSRVELDRPOS and PPS sections and the position-type values read the same. Three log sections moved: STADOP §7.5.96 → §7.5.98, UNIHEADING §7.5.99 → §7.5.101, and UNILOGLIST §7.5.101 → §7.5.103. A second pass (2026-11-13) read §3.4–3.5, §4.9, §4.32, §4.35–4.36, §4.44, §7.5.2, §7.5.82, §7.5.86, §7.5.93 and §8.2–8.4. It corrected the PVTALG defaults and added the items in "More from the manual (R1.16)" below.
 - `docs/datasheets/UM980_Datasheet.pdf` and `docs/datasheets/UM980_User Manual_EN_R1.10.pdf` (UM980 hardware manual R1.10, 2026-06). Section and table numbers marked "UM980 HW" refer to the manual.
 - `docs/datasheets/um982-user-manual-en-r1-1.pdf` (UM982 hardware manual R1.1, 2022-09). Section and table numbers marked "HW" refer to it.
 - `docs/UM982_Product_Brief_En_mail.pdf` (UM982 product brief) and `docs/PRECISION PRODUCTS LIST 2026_En.pdf` (Unicore's 2026 product list). Marketing sheets: used only where they agree with or update the manuals.
@@ -99,7 +99,15 @@ This project uses 20 Hz on both, so the lower maximum rate of the UM982 costs no
 - **Command acknowledgement:** the reply is `$command,<cmd>,response: OK*cs`. An error reply is `$command,<cmd>,response: PARSING FAILED GRAMMAR ERROR,<token>*cs`. Both were confirmed on a UM982 and on a UM980 (bench results below). The UM980 test found more error forms, all without `response: OK`, so the firmware's test (a `$command,` line that contains `response: OK` is OK, anything else is an error) covers them.
 - **Heading (dual-antenna products):**
   - Heading is on by default (§1.3). It is the angle clockwise from true north to the baseline from the master antenna (ANT1) to the slave antenna (ANT2).
-  - **`CONFIG HEADING`** (§4.18): modes `FIXLENGTH` (default), `VARIABLELENGTH`, `STATIC`, `LOWDYNAMIC`, `TRACTOR`. `LENGTH <cm> <tol cm>` sets a fixed baseline; it isn't used here. `RELIABILITY 1..4` sets the heading reliability threshold; the default is 3.
+  - **`CONFIG HEADING`** (§4.18): modes `FIXLENGTH` (default), `VARIABLELENGTH`, `STATIC`, `LOWDYNAMIC`, `TRACTOR`. Table 4-20 describes them as follows:
+    - `FIXLENGTH`: the ANT1–ANT2 distance is fixed, and the antennas move together or are static.
+    - `VARIABLELENGTH`: the relative position and distance of the antennas change dynamically.
+    - `STATIC`: both antennas are static.
+    - `LOWDYNAMIC`: low-speed carriers such as pile drivers.
+    - `TRACTOR`: the distance changes slowly, "similar to the velocity of a tractor".
+    - By that wording, a rigid roof bar fits `FIXLENGTH`. `VARIABLELENGTH` stays the decision (user, 2026-11-13); the three are compared on the bench (Verification 9).
+    - `MODE HEADING2 TRACTOR` (§3.5, sent by the V4.1 firmware below) is the Heading2 mode between two receivers, not this command.
+  - `LENGTH <cm> <tol cm>` sets a fixed baseline; it isn't used here. `RELIABILITY 1..4` sets the heading reliability threshold; the default is 3.
   - **`CONFIG HEADING OFFSET <heading> <pitch>`** (§4.19) adds an offset to the HEADING, GPTHS and HEADING2 outputs. The default is 0.
   - **`CONFIG SMOOTH HEADING <epochs>`** (§4.49) works on dual-antenna products only. It is not used, because the filter does its own smoothing and smoothing adds lag.
   - **`RESET`** (§8.2) has `RTK2` (slave antenna RTK) and `HEADING` options to restart the heading solution.
@@ -119,7 +127,21 @@ What this means here:
 - **Build check at boot.** Identify already reads the build from `VERSIONA` for the diagnostics page. Add a warning (log and diagnostics) when a UM980 reports a build below 25621. Don't refuse the receiver.
 - **GSV signal ID** only matters if the receiver's own NMEA GSV is passed through to SW Maps. Our NMEA out is built by the Pico, so it has no effect now.
 - **Not used:** PPP (B2b, MADOCA), TruePoint and the proprietary correction format. This project uses RTK from NTRIP RTCM. RTK-assisted PPP could bridge RTK outages, but it needs PPP enabled, which the target configuration doesn't do.
-- **Diagnostics candidates:** the UM980 anti-spoofing warning (log name not known yet; look it up in the N4 manual R1.16) and the UM982 PVT reliability threshold (command not yet looked up).
+- **Diagnostics candidates:** anti-spoofing (`CONFIG ANTISPOOF` and the `SPOOFINFO` log) and the UM982 PVT reliability threshold (`CONFIG PVT RELIABILITY`). Both are described in "More from the manual (R1.16)" below and stay out of the target configuration.
+
+## More from the manual (R1.16)
+Read 2026-11-13. None of these items changes the target configuration; they are candidates and facts for later decisions.
+- **Anti-spoofing:** `CONFIG ANTISPOOF ENABLE|DISABLE` (§4.9, Table 4-10). The default is DISABLE. It is listed for the UM980 and UM982; R1.16 added the UM980.
+  - The log is `SPOOFINFO` (msg ID 530, §7.5.93, Table 7-163), 1 Hz, listed for the UM982 only. Fields: a spoofing flag (0/1); SpoofNoticeMask (bit 0 position anomaly, bit 1 time, bit 2 tracked satellites, bit 3 signal source); TimeNoticeMask (GPS/BDS/GAL/GLO time reset bits); the affected signals as a bit mask (Table 7-164); and one 64-bit satellite mask per constellation. The second field is named "Pos type" but described as the number of tracked satellites; the manual's example has `NARROW_INT` there, so read it as a position type.
+  - Whether the UM980 (build 25621, whose notes mention "anti-spoofing detection with warning messages") outputs SPOOFINFO is a bench check.
+- **PVT reliability:** `CONFIG PVT RELIABILITY <horizontal> <vertical> <doppler velocity>` (§4.36, Table 4-46). Each is 1 normal (default), 2 strict or 3 very strict. It applies to the single-point solution only, on the UM982 from build 17746 (ours is 18975). Not sent; a candidate if bad standalone epochs reach the filter.
+- **PPSSTATUS** (msg ID 9000, §7.5.82, Table 7-152): 1 Hz, UM980 and UM982. Fields: status (0 no pulse, 1 pulse without guaranteed accuracy, 2 about 100–1000 ns, 3 better than 100 ns), the PPS GPS week and ms, the pulse phase error in ns, the offset to the observation time, and the PPS configuration. A candidate for gating the PPS time anchor and for the diagnostics page; not in the log set yet (about 24 + 60 + 4 B/s if added).
+- **PPS keeps running after the fix is lost:** with `ENABLE`, PPS starts after the position is fixed and PPS has converged, and it continues for about 30 s after positioning stops (§4.32, Table 4-41). A PPS edge alone therefore doesn't prove a current fix; the parser still needs BESTNAVB's solution status. The manual lists `ENABLE` as the default, yet the UM982 shipped with `PPS DISABLE`. Valid periods are 50, 100, 200 … 20000 ms; UserDelay is ±100 000 000 ns.
+- **`UNLOG <port>`** with no message stops every log on that port (§8.4). `UNLOGALL` isn't in the manual, so our `UNLOG COMx` is the documented form.
+- **`RESET CONFIG`** (§8.2) clears the configuration except the serial ports, SIGNALGROUP, the log list and standby. Not used: provisioning starts from `FRESET`.
+- **`CONFIG RTK TIMEOUT`** (§4.44, Table 4-53): 0 disables RTK; 1–1800 s is the maximum age of corrections (600 s at most without standalone authorisation).
+- **`RTCMSTATUSB ONCHANGED`** (msg ID 2125, §7.5.86, ONCHANGED only) reports each received RTCM message type with its count, the base ID and the satellite and signal counts: the receiver's own view of the corrections it decodes. A candidate for [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) diagnostics.
+- **More product types in `VERSION`** (§7.5.2, updated in R1.16): besides 17 = UM982 and 18 = UM980, for example 40 = UMD982, 64 = UM980C, 65 = UM982C and 94 = UM982A. Identify accepts only 17 and 18, so a module built on one of the variants is reported as "unsupported receiver". Decide when one turns up (open question).
 
 ## Target configuration
 | Item | UM980 single | UM982 single | UM982 dual | Why |
@@ -129,8 +151,8 @@ What this means here:
 | Heading reliability, offset | — | — | not sent (default 3, offset 0) | The firmware applies `baseline_yaw_b` itself |
 | Rover mode | `MODE ROVER SURVEY` | same | same | The manual's mode for precision agriculture and survey. Set explicitly so a different firmware default doesn't matter |
 | Doppler prediction | `CONFIG PSRVELDRPOS DISABLE` | same | same | No fake fixes into INSLIB, which does its own prediction. On the UM980, `CONFIG` lists it once it is set (either value) and not before (bench results 2026-11-12, UM980 CONFIG listing) |
-| PVT engine | `CONFIG PVTALG MULTI` | same | same | Dual-frequency standalone solution (§4.35, Table 4-45). The default is MULTI on the UM980 but SINGLE on the UM982, so it is set on both. `CONFIG` lists `PVTALG MULTI` once it is set; with the default, no line appears (seen on the UM980, 2026-11-12) |
-| PPS | `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0` | same | same | 1 Hz, rising edge, 100 ms wide. `ENABLE` outputs PPS only once time has converged, so there are no edges before time is valid (§4.32) |
+| PVT engine | `CONFIG PVTALG MULTI` | same | same | Dual-frequency standalone solution (§4.35, Table 4-45). The default is AUTO (single-frequency with ionospheric estimation) on the UM980 and SINGLE on the UM982, so it is set on both. `CONFIG` lists `PVTALG MULTI` once it is set; with the default, no line appears (seen on the UM980, 2026-11-12) |
+| PPS | `CONFIG PPS ENABLE GPS POSITIVE 100000 1000 0 0` | same | same | 1 Hz, rising edge, 100 ms wide. `ENABLE` outputs PPS only once time has converged, so there are no edges before time is valid. It keeps pulsing for about 30 s after positioning is lost (§4.32) |
 | Port locks | none: `CONFIG RXTYPE` is never sent | same | same | Risk of bricking. All ports stay at the default AUTO |
 | Baud | `CONFIG COM2 460800`, `CONFIG COM3 460800`, `CONFIG COM1 460800` | same | same | COM1 is the Pico's port, so it goes last. A PC on the USB-C (COM3) or on the COM2 pins finds the receiver at a known rate |
 | Logs | `UNLOG COM1`, `UNLOG COM2`, `UNLOG COM3`, then `BESTNAVB COM1 0.05`, `STADOPB COM1 1`, `HWSTATUSB COM1 1` | same | the same, plus `UNIHEADINGB COM1 0.05` | See below |
@@ -206,7 +228,7 @@ Rules:
 In VARIABLELENGTH mode the receiver doesn't check the baseline length against a fixed value. That trades one integrity check for robustness when the length isn't known. But the INS treats the GNSS heading as the heading of the body, so the baseline must stay rigidly fixed to the IMU even though its length isn't configured.
 - **Gate in the parser:** keep a running median of the reported baseline length. Mark the heading invalid when an epoch's length differs from it by more than a set tolerance (start at 5 cm, tune on the bench). A sudden change means a wrong fix or a moved antenna.
 - If ANT2 is ever placed on something that moves relative to the cab (an implement, for example), its heading is not the tractor heading and must not be fed to the INS. Set the antenna mode to single in that case.
-- The manual also lists `TRACTOR`, but its description is unclear in the extracted table. Compare it once on the bench against VARIABLELENGTH. That is an open question; VARIABLELENGTH stays the decision.
+- The manual's own wording (Table 4-20, see "Facts from the manual") fits `FIXLENGTH` for a rigid bar, describes `VARIABLELENGTH` as for antennas whose distance changes dynamically, and `TRACTOR` as a slowly changing distance. Compare the three once on the bench. That is an open question; VARIABLELENGTH stays the decision.
 
 ### Where the offset is stored
 `baseline_yaw_b` is an install setting, stored in Pico flash and editable on the web config page ([web-config-server.md](web-config-server.md)), next to the antenna mode. It is not stored in the receiver, so swapping a receiver doesn't lose it.
@@ -293,7 +315,9 @@ Not done yet:
    - Whether epochs with 0 satellites and an HDOP of 9999 appear in BESTNAVB / STADOPB, as the AiO v4.5 firmware sees in a UM982's GGA ("Comparison: the AgOpenGPS UM982 settings"), and that the parser rejects them. None in 10 min on the UM980 indoors (15 to 19 satellites in the solution throughout, bench results 2026-11-12, UM980 gap capture); still to watch for on the UM982 and in the field.
    - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value. On the UM980 (already warm) it read about 60 000 and rose from 59.9 to 61.1 over 10 min (bench results 2026-11-12, UM980 gap capture), which fits °C × 1000. A one-shot `HWSTATUSA COM3` on 2026-11-13, with only its five 1 Hz NMEA logs running, read 56 204 (about 56.2 °C; supplies 0.908, 1.014, 1.805 V). The cold-start reading and the thermometer check are still open.
    - The UNIHEADING position-type values that mean a fixed heading, and the heading latency against BESTNAV in the same epoch.
-   - VARIABLELENGTH against TRACTOR behaviour, and what `CONFIG` shows after both are sent (the AgOpenGPS file sends both).
+   - FIXLENGTH, VARIABLELENGTH and TRACTOR against each other on the rigid bar (heading σ, time to fixed heading, behaviour when ANT2 is shadowed), and what `CONFIG` shows after TRACTOR then VARIABLELENGTH are sent (the AgOpenGPS file sends both).
+   - Whether each receiver outputs `SPOOFINFOB` (listed for the UM982 only) and `PPSSTATUSB`, and what PPSSTATUS reports before the fix, at RTK fixed and in the 30 s after the antenna is disconnected.
+   - What Identify should do with a module built on a UM980C / UM982C / UM982A (VERSION types 64, 65, 94), if one turns up.
    - The 5 V current of each module at 20 Hz (the UM982 datasheet's 600 mW is for 10 Hz), and the module's COM1 and PPS logic level (3.3 V expected).
 
 ## Bench results (2026-11-06, UM982 module on a PC over USB-C)
@@ -514,7 +538,7 @@ The five NMEA logs and every other line were unchanged at each step.
 
 - **Saved items stay listed** after `RESET` and a power cycle, so the fast-path check sees on every boot what provisioning set.
 - **`SAVECONFIG` answers in about 250 ms** on the UM980 (one measurement, 115200, nothing else queued). The firmware's 10 s wait leaves plenty of margin.
-- **The module's saved state now differs from the [as-received config](../docs/receiver-configs/um980-as-received-2026-11-12.md)** by these two lines. Both are target values (`PVTALG MULTI` is the UM980 default anyway). To go back exactly, `FRESET` and the restore commands in that file.
+- **The module's saved state now differs from the [as-received config](../docs/receiver-configs/um980-as-received-2026-11-12.md)** by these two lines. Both are target values. `PVTALG MULTI` is a real change: the UM980 default is AUTO (§4.35). To go back exactly, `FRESET` and the restore commands in that file.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
@@ -524,7 +548,7 @@ From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `cor
   - `UNILOGLIST`: lines that start with `<`. The first is the count (for example `<   3`), followed by that many log lines.
 - **Timeouts:** 5 s per command and 10 s for `SAVECONFIG`. Ours were 1 s for everything.
 - **Quiet read:** it sends `UNLOGALL COM1`, `UNLOGALL COM2`, `UNLOGALL COM3` before reading `CONFIG`, because the log stream gets in the way, and it notes that the read stops the GNSS stream for a few seconds. Our fast path reads `CONFIG` with BESTNAVB running, so check on the bench that the binary frames and the `$CONFIG` lines separate cleanly, or quiet the port first.
-- **`UNLOGALL` versus `UNLOG`:** it uses `UNLOGALL <port>`; our sequence uses `UNLOG <port>`. Check in the manual and on the bench which one clears every log on a port.
+- **`UNLOGALL` versus `UNLOG`:** it uses `UNLOGALL <port>`; our sequence uses `UNLOG <port>`. The manual documents only `UNLOG`, and `UNLOG <port>` with no message stops every log on that port (§8.4), so ours is the documented form. `UNLOGALL` is presumably an undocumented alias.
 - **Logs on before `SAVECONFIG`:** it restores the logs before saving, so the saved settings include them. Our provisioning does the same (logs in step 6, `SAVECONFIG` in step 7).
 
 The original of that code is the AiO v26 ("New Dawn") Teensy firmware (https://github.com/AgOpenGPS-Official/Firmware_Teensy_AiO_26, `lib/aio_system/UM98xManager.cpp`, commit `2551bff`, read 2026-11-10, GPL v3). It adds three details; again facts from its code, and no code is taken:

@@ -62,6 +62,7 @@ Both fit easily in BLE throughput with a 247-byte MTU. RTCM arrives in arbitrary
   - RTCM bytes and frames received, CRC errors, time since the last frame.
   - Message types seen, e.g. 1005, 1074/1077, 1084/1087, 1094/1097, 1124/1127, 1230.
   - Correction age as reported by the UM980.
+  - Candidate, not in the log set: `RTCMSTATUSB ONCHANGED` (N4 manual §7.5.86) reports each RTCM message type the receiver decoded, with its count, base ID and satellite counts. Beside our own frame counts it would show that the forwarded frames were accepted by the receiver ([gnss-um98x-config.md](gnss-um98x-config.md), "More from the manual (R1.16)").
 
 ## Timing
 Everything runs on core 0, as laid out in [rtos-decision.md](rtos-decision.md). The filter on core 1 is unaffected. Bluetooth receive load is small (1–3 kB/s, in chunks of up to a few hundred bytes).
