@@ -65,10 +65,10 @@ INSLIB wants FRD, accelerometer as **specific force** in m/s² (level and at res
 | Sensor | TM210 (FLU) → INSLIB (FRD) |
 |---|---|
 | Gyro | `(gx, −gy, −gz)` rad/s |
-| Accelerometer | `(ax, −ay, −az) × 9.8158` **if** the TM210 outputs specific force. The datasheet footnote shows `(0, 0, −1)` with z pointing to the sky, which is the gravity-vector sign; then it is `(−ax, ay, az) × 9.8158`. **Decide on the bench** (see checks below). |
+| Accelerometer | `(−ax, ay, az) × 9.8158`. The TM210's raw object reports the **gravity vector**, not specific force (bench result 2026-11-12, below; the datasheet footnote shows the same `(0, 0, −1)` with z pointing to the sky). The firmware sets this with `APP_TM210_ACC_IS_GRAVITY 1`. |
 | Magnetometer | `(mx, −my, −mz) × ~50 µT` (approx. total field in Denmark), then refine with mag calibration |
 
-Evidence for the accelerometer sign, from another project: the AgOpenWeb-HAT IMU evaluation (https://github.com/chriskinal/AgOpenWeb-HAT, `hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md` §8.4, commit `e4bd9ef`, read 2026-11-10) logged a **TM171** beside an ST IMU and found "the same axes [X forward, Y left, Z up], its accel the opposite sign (it reports gravity), its gyro in rad/s". That points to the second form, `(−ax, ay, az) × 9.8158`. It was measured on a TM171's output, not on our TM210's raw object, so the bench check still decides.
+Evidence for the accelerometer sign, from another project: the AgOpenWeb-HAT IMU evaluation (https://github.com/chriskinal/AgOpenWeb-HAT, `hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md` §8.4, commit `e4bd9ef`, read 2026-11-10) logged a **TM171** beside an ST IMU and found "the same axes [X forward, Y left, Z up], its accel the opposite sign (it reports gravity), its gyro in rad/s". That points to the second form, `(−ax, ay, az) × 9.8158`. It was measured on a TM171's output, not on our TM210's raw object; our bench check (below) found the same on the TM210.
 
 Do the sign/unit conversion in the parser so all later data is plain FRD SI. Put the **physical mounting** (TM210 not aligned with the vehicle) into config as `mount_rpy_deg` and compose it into `imu_acc_misalignment` / `imu_gyr_misalignment` with `imu_mount_compose()` from `external/INSLIB/tools/imu_mount.h`.
 
@@ -102,12 +102,38 @@ So the x and y gyro noise may be about 2× the datasheet-derived figure, and the
 
 ## Bench checks (after conversion, FRD)
 Expected specific force: `f = (g·sinθ, −g·sinφ·cosθ, −g·cosφ·cosθ)` for pitch θ, roll φ.
-- Level → acc ≈ (0, 0, −9.81). If z comes out +9.81, the accelerometer sign is the gravity-vector convention: switch to the second row of the table.
+- Level → acc ≈ (0, 0, −9.81). Done: the raw object is the gravity vector, so the conversion in the table is `(−ax, ay, az)` (results below).
 - Nose up → acc_x > 0. Right side down → acc_y < 0.
 - Turn right (clockwise seen from above) → gyr_z > 0. Roll right → gyr_x > 0. Nose up → gyr_y > 0.
 - Rate: 800 ± 20 packets/s, CRC error rate ≈ 0 over 10 minutes with the real cable length.
 - Timestamp wrap: run > 72 min and check the unwrapped time stays monotonic.
 - Run INSLIB's static auto-init on the bench: roll/pitch converge to the table angle, mode reaches ATTITUDE_ONLY without GNSS.
+
+### Bench results (2026-11-12, TM210 on miniPi over USB)
+The TM210 (node ID 925) on miniPi's USB as `/dev/ttyACM0`, read with a termios script (no pyserial). Its flash settings were the originals: 50 Hz, raw + RPY, UART output on, **USB output off** (bit 20 = 0), baud 115200, silent time 1. With USB output off it still answered Setting and Status requests over USB, but streamed nothing. For the tests the target was written to RAM only (bit 18 = 0): raw only, 800 Hz, UART + USB on, silent time 0, baud unchanged. It was acknowledged and read back. A power cycle restores the flash settings.
+
+**Accelerometer sign: the gravity vector.** Raw values (TM210 frame, g), 1 s means, the TM210 still on a table:
+
+| Position | ax | ay | az | Reading |
+|---|---|---|---|---|
+| Flat, top face up | −0.049 | +0.058 | **−0.997** | z up and az < 0: gravity, not specific force |
+| X arrow raised about 33° | **−0.541** | −0.131 | −0.831 | gravity along −x |
+| Y arrow raised about 30° | −0.037 | **−0.494** | −0.865 | gravity along −y |
+
+|a| was 0.997–1.000 in every position. After `(−ax, ay, az) × 9.8158`, nose up gives acc_x = +5.3 m/s² and right side down gives acc_y = −4.85 m/s², as the checks above expect. The case markings and the data agree on a right-handed FLU frame. **The gyro sign check is still open:** the yaw, roll and pitch rotations have not been recorded yet.
+
+**Rate and link, 10 min static over USB:**
+
+| Item | Result |
+|---|---|
+| Raw packets | 480 548 in 599 s, mean 802.25 per host second; every full second 794–803 |
+| CRC errors, skipped bytes, other objects | 0, 0, 0 |
+| TM210 timestamp steps | 479 863 × 1 250 µs and 684 × 2 500 µs; none longer, none backwards |
+| Status (on request) | 17.2 °C, internal rate 802 Hz, QoS 5 (2026-11-13) |
+
+- **The 2 500 µs steps are samples the TM210 itself skips** (about 0.14 %), not link losses: no byte or CRC was bad. They sit exactly at the firmware's gap limit (`GAP_US` 2500, gap only if longer), so they aren't flagged. INSLIB gets the right `dt` for them from the timestamp difference.
+- **The TM210 clock runs a few tenths of a percent fast against the Pi's:** 802 packets per host second while its own timestamps step 1 250 µs (800 Hz), and the Status object reports 802 Hz. An estimate from host-second counting, not measured precisely. The firmware's offset-and-drift mapping to the Pico clock has to absorb it.
+- **Not covered:** this was the USB port, not the TM210's UART, so the UART link test ([imu-tm210-config.md](imu-tm210-config.md), "Still to do" 1) and the run with the real cable length are still open. The timestamp-wrap run (> 72 min) is open too.
 
 ## Vibration check
 The datasheet gives no g-sensitivity or vibration rectification figure, so measure it. The method and the reference levels come from the AgOpenWeb-HAT evaluation (same document, §8.3–8.4, a TM171 on a three-cylinder tractor, 2026-11-08); the results are theirs, not measured on our hardware.

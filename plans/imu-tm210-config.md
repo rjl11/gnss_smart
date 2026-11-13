@@ -181,6 +181,10 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 - Status on request.
 - Restore to the original settings.
 
+**Done on miniPi (2026-11-12, over USB, RAM only):** details in [imu-tm210.md](imu-tm210.md), "Bench results (2026-11-12, TM210 on miniPi over USB)".
+- **With USB output off in flash (bit 20 = 0), the TM210 still answers Setting and Status requests over USB** and acknowledges a RAM write there, but it streams nothing. So USB is a recovery path even when bit 20 is off.
+- The target applied in RAM again: 10 min of raw-only output at 802 packets per host second, with 0 CRC errors. That was over USB, so item 1 below is still open.
+
 **Still to do:**
 1. **UART link:** with the Pico's UART0 (or a USB-UART adapter) on the TM210's UART, provision from 115200 and check:
    - whether the Ack arrives at the old or the new baud, and how soon after the Ack the new baud is active
