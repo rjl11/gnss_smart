@@ -5,7 +5,9 @@
  *    (plans/imu-tm210-config.md), not the vendor library's.
  *  - Boot state machine: detect the baud rate, check the settings, and if they
  *    differ provision the TM210 (RAM first, flash only after the output has
- *    been verified).
+ *    been verified). A new UART baud only takes effect from flash after a
+ *    power cycle, so a baud change is written to flash at the old baud and
+ *    the driver then waits for the IMU to be power-cycled.
  *  - Raw-data parser (CMD 41): converts to FRD SI units and maps the TM210's
  *    own timestamps onto the Pico microsecond clock (plans/imu-tm210.md).
  *
@@ -32,6 +34,7 @@ extern "C" {
 #define TM210_E_READBACK    (-104) /* settings read back differ from the target  */
 #define TM210_E_OUTPUT      (-105) /* output is not raw-only at 800 Hz           */
 #define TM210_E_LOST        (-106) /* data stopped while running                 */
+#define TM210_E_POWER_CYCLE (-107) /* new baud saved to flash, needs a power cycle */
 
 #define TM210_SETTING_LEN      20
 #define TM210_TARGET_BAUD      921600u
@@ -40,13 +43,14 @@ extern "C" {
 typedef enum {
     TM210_ST_DETECT = 0,     /* scanning baud rates for a Setting reply       */
     TM210_ST_CHECK,          /* settings match, measuring the output rate     */
-    TM210_ST_APPLY,          /* writing the target to RAM                     */
-    TM210_ST_READBACK,       /* reading the settings back at 921600           */
+    TM210_ST_APPLY,          /* writing the target to RAM, baud unchanged     */
+    TM210_ST_READBACK,       /* reading the settings back                     */
     TM210_ST_VERIFY_OUTPUT,  /* 2 s: only CMD 41, 800 Hz, no CRC errors       */
-    TM210_ST_COMMIT,         /* writing the target to flash                   */
+    TM210_ST_COMMIT,         /* writing the target to flash, with 921600 baud */
     TM210_ST_COMMIT_READBACK,
     TM210_ST_RUN,            /* samples flow                                  */
-    TM210_ST_ERROR           /* layout not recognised: nothing is written     */
+    TM210_ST_ERROR,          /* layout not recognised: nothing is written     */
+    TM210_ST_POWER_CYCLE     /* 921600 is in flash: waiting for a power cycle */
 } tm210_state_t;
 
 typedef struct {

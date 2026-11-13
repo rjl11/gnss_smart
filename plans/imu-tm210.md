@@ -35,7 +35,7 @@ The user guide ("Raw Data Display" and "Raw Sensor Data") calls this "calibrated
 - **Temperature** is measured inside the main sensor chip, and is usually above ambient because of the module's own heat.
 
 ## TM210 configuration (set by the MCU at boot)
-The Pico checks these settings at every boot and provisions the TM210 if they don't match: read-modify-write of the Setting object, applied to RAM first and saved to flash only after the output has been verified. No PC is needed. Details are in [imu-tm210-config.md](imu-tm210-config.md).
+The Pico checks these settings at every boot and provisions the TM210 if they don't match: read-modify-write of the Setting object, applied to RAM first and saved to flash only after the output has been verified. A new baud only takes effect from flash after a power cycle, so moving a TM210 from 115200 to 921600 takes one power cycle after the Pico has saved it (bench, 2026-11-13). No PC is needed. Details are in [imu-tm210-config.md](imu-tm210-config.md).
 
 | Setting | Value | Why |
 |---|---|---|

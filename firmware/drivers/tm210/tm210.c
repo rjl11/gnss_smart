@@ -60,7 +60,6 @@
 #define ACK_RETRIES             5u
 #define MAX_COMMIT_ATTEMPTS     2u /* flash writes before running from RAM */
 #define READBACK_RETRIES        3u
-#define BAUD_SWITCH_WAIT_US     300000u
 #define CHECK_WINDOW_US         1000000u
 #define CHECK_RETRIES           5u
 #define VERIFY_WINDOW_US        2000000u
@@ -136,12 +135,13 @@ static void send_request(tm210_t *t, uint8_t cmd)
 
 /* ---- Settings ---------------------------------------------------------- */
 
-static bool settings_match(const uint8_t *s)
+/* The target fields, with the baud word expected to read baud. */
+static bool settings_match(const uint8_t *s, unsigned baud)
 {
     uint32_t sw = rd_u32(&s[OFS_SWITCHES]);
     return (sw & SW_MUST_BE_0) == 0 &&
            (sw & SW_MUST_BE_1) == SW_MUST_BE_1 &&
-           rd_u16(&s[OFS_BAUD]) == TM210_TARGET_BAUD / 100u &&
+           rd_u16(&s[OFS_BAUD]) == baud / 100u &&
            rd_u16(&s[OFS_SILENT_TIME]) == 0 &&
            rd_u16(&s[OFS_ODR]) == TM210_TARGET_ODR_HZ;
 }
@@ -156,8 +156,12 @@ static bool layout_recognised(const tm210_t *t)
            rd_u16(&t->setting[OFS_BAUD]) == t->baud / 100u;
 }
 
+/* A RAM write keeps the baud in use: the TM210 acknowledges a new baud in
+ * RAM but its UART stays at the old one (bench, 2026-11-13). The new baud
+ * goes into the flash write only, and takes effect after a power cycle. */
 static void send_target(tm210_t *t, bool save_to_flash)
 {
+    unsigned baud = save_to_flash ? TM210_TARGET_BAUD : t->baud;
     uint8_t s[TM210_SETTING_LEN];
     memcpy(s, t->setting, sizeof s);
 
@@ -168,7 +172,7 @@ static void send_target(tm210_t *t, bool save_to_flash)
         sw |= SW_SAVE_FLASH;
     }
     wr_u32(&s[OFS_SWITCHES], sw);
-    wr_u16(&s[OFS_BAUD], (uint16_t)(TM210_TARGET_BAUD / 100u));
+    wr_u16(&s[OFS_BAUD], (uint16_t)(baud / 100u));
     wr_u16(&s[OFS_SILENT_TIME], 0);
     wr_u16(&s[OFS_ODR], (uint16_t)TM210_TARGET_ODR_HZ);
 
@@ -419,6 +423,20 @@ static void enter_run(tm210_t *t, uint64_t now)
     t->next_status_us = now + 1000000u;
 }
 
+/* The target with 921600 baud is in the TM210's flash, but it still talks at
+ * the old baud. Detection runs again every 2 s and finds it at 921600 once
+ * it has been power-cycled; until then nothing more is written. */
+static void enter_power_cycle(tm210_t *t, uint64_t now)
+{
+    if (t->last_error != TM210_E_POWER_CYCLE) {
+        LOG(t, "%u baud is saved to flash and applies after a power cycle: power-cycle the IMU",
+            TM210_TARGET_BAUD);
+    }
+    enter(t, TM210_ST_POWER_CYCLE);
+    t->last_error = TM210_E_POWER_CYCLE;
+    t->deadline_us = now + DETECT_RETRY_US;
+}
+
 /* Goes to COMMIT, or to RUN on the RAM settings once the flash write has
  * failed too often, so a problem cannot turn into endless flash writes. */
 static void enter_commit(tm210_t *t, uint64_t now)
@@ -508,9 +526,13 @@ static void step(tm210_t *t, uint64_t now)
             t->step = 2;
         } else if (t->got_setting) {
             LOG(t, "found at %u baud, node id %u", t->baud, t->node_id);
-            if (t->baud == TM210_TARGET_BAUD && settings_match(t->setting)) {
+            if (settings_match(t->setting, TM210_TARGET_BAUD) && t->baud == TM210_TARGET_BAUD) {
                 enter(t, TM210_ST_CHECK);
                 start_window(t, now, CHECK_WINDOW_US);
+            } else if (settings_match(t->setting, TM210_TARGET_BAUD)) {
+                /* 921600 is set but the UART still runs at the old baud:
+                 * saved, not yet power-cycled. Write nothing. */
+                enter_power_cycle(t, now);
             } else {
                 enter(t, TM210_ST_APPLY);
             }
@@ -552,30 +574,12 @@ static void step(tm210_t *t, uint64_t now)
             enter(t, TM210_ST_ERROR);
             break;
         }
-        if (t->step <= 1) {
-            t->need_commit = true; /* the write may land even if the Ack is lost */
-            r = write_step(t, now, false);
-            if (r < 0) {
-                fail(t, now, TM210_E_NO_ACK);
-            } else if (r > 0) {
-                LOG(t, "target applied to RAM");
-                if (t->baud != TM210_TARGET_BAUD) {
-                    t->step = 2;
-                } else {
-                    enter(t, TM210_ST_READBACK);
-                }
-            }
-        } else if (t->step == 2) { /* switch to the new baud */
-            if (uart_dma_tx_idle(t->port)) {
-                t->baud = TM210_TARGET_BAUD;
-                uart_dma_set_baud(t->port, t->baud);
-                t->pkt_len = 0;
-                t->deadline_us = now + BAUD_SWITCH_WAIT_US;
-                t->step = 3;
-            }
-        } else if (now >= t->deadline_us) {
-            uart_dma_rx_flush(t->port);
-            t->pkt_len = 0;
+        t->need_commit = true; /* the write may land even if the Ack is lost */
+        r = write_step(t, now, false);
+        if (r < 0) {
+            fail(t, now, TM210_E_NO_ACK);
+        } else if (r > 0) {
+            LOG(t, "target applied to RAM at %u baud", t->baud);
             enter(t, TM210_ST_READBACK);
         }
         break;
@@ -585,12 +589,18 @@ static void step(tm210_t *t, uint64_t now)
         if (r < 0) {
             LOG(t, "no Setting reply at %u baud after the write", t->baud);
             fail(t, now, TM210_E_READBACK);
-        } else if (r > 0 && !settings_match(t->setting)) {
+        } else if (r > 0 && !settings_match(t->setting, t->baud)) {
             log_setting(t, "read back differs from the target");
             fail(t, now, TM210_E_READBACK);
-        } else if (r > 0) {
+        } else if (r > 0 && t->baud == TM210_TARGET_BAUD) {
             enter(t, TM210_ST_VERIFY_OUTPUT);
             start_window(t, now, VERIFY_WINDOW_US);
+        } else if (r > 0) {
+            /* 800 Hz doesn't fit the old baud, so the output can't be
+             * checked before the flash write. It is checked after the
+             * power cycle (CHECK), and the read-back has confirmed the
+             * layout. */
+            enter_commit(t, now);
         }
         break;
 
@@ -622,15 +632,25 @@ static void step(tm210_t *t, uint64_t now)
         if (r < 0) {
             LOG(t, "no Setting reply after the flash write");
             fail(t, now, TM210_E_READBACK);
-        } else if (r > 0 && !settings_match(t->setting)) {
+        } else if (r > 0 && !settings_match(t->setting, TM210_TARGET_BAUD)) {
             log_setting(t, "read back after the flash write differs from the target");
             fail(t, now, TM210_E_READBACK);
         } else if (r > 0) {
             t->need_commit = false;
             t->commit_attempts = 0;
             t->stats.provisions++;
-            LOG(t, "settings saved to flash. Boot mode Auto applies from the next power cycle");
-            enter_run(t, now);
+            if (t->baud == TM210_TARGET_BAUD) {
+                LOG(t, "settings saved to flash. Boot mode Auto applies from the next power cycle");
+                enter_run(t, now);
+            } else {
+                enter_power_cycle(t, now);
+            }
+        }
+        break;
+
+    case TM210_ST_POWER_CYCLE:
+        if (now >= t->deadline_us) {
+            enter_detect(t, now, 0);
         }
         break;
 
@@ -705,6 +725,7 @@ const char *tm210_state_name(tm210_state_t s)
     case TM210_ST_COMMIT_READBACK: return "commit-readback";
     case TM210_ST_RUN:             return "run";
     case TM210_ST_ERROR:           return "error";
+    case TM210_ST_POWER_CYCLE:     return "power-cycle";
     default:                       return "?";
     }
 }
@@ -719,6 +740,7 @@ const char *tm210_strerror(int err)
     case TM210_E_READBACK: return "settings read back differ from the target";
     case TM210_E_OUTPUT:   return "output is not raw-only at 800 Hz";
     case TM210_E_LOST:     return "IMU data stopped";
+    case TM210_E_POWER_CYCLE: return "921600 baud saved to flash: power-cycle the IMU";
     default:               return "unknown error";
     }
 }

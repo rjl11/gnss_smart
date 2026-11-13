@@ -103,8 +103,13 @@ The library calls bits 26–31 "unused, must be 0", but bits 26–28 clearly do 
 - **Baud:**
   - The factory default is 115200. Supported rates are 1M, 921600, 460800, 230400, 115200, 57600, 38400, 9600, 2400 and 1200.
   - The datasheet recommends ≥921600 for ODR ≥ 400 Hz. The Q&A asks for ≥230400 or ≥460800 at 400/800 Hz. 921600 with raw output only is well inside both.
+  - **A new baud only takes effect from flash, after a power cycle** (bench, 2026-11-13, Pico UART0). Written to RAM, it is acknowledged at the old baud and reads back as the new value, but the UART keeps running at the old baud: nothing answered at 921600 right after the write or 2 s later, and the next scan found it at 115200 again. Saved to flash (bit 18 = 1) and power-cycled, the TM210 came up at 921600 with 802 Hz raw output and no CRC errors.
+  - At 115200 an 800 Hz raw stream is limited by the line: about 201 packets/s arrive, against about 235 that would fit.
   - **Recovery when the baud is unknown:** for the TM210 the vendor's answer is the USB port ("simply use its USB interface to connect and find or reset the baudrate"). The 6-second 115200 SCAN lock in the user guides applies to the TM200/TM35x only. The firmware scans the UART baud rates itself, and USB (bit 20) is the manual fallback.
 - **USB:** the USB port is a virtual COM port (VID:PID 0483:5740). Its baud setting has no effect. With bit 20 on, it carries the same objects at the same rate as the UART: 800 Hz raw-only ran over USB with no gaps.
+  - **With USB connected, the TM210 sometimes ignores requests on its UART** (bench, 2026-11-13). After a power cycle with USB plugged in to dietpi, it kept streaming on the UART but answered no Setting request from the Pico at any baud, in two different settings states. Unplugging USB fixed it at once. Earlier the same day it did answer on the UART with USB connected, so the trigger is not known. For UART work, unplug USB.
+  - Right after it enumerates, the USB port may not answer for a few seconds: the first two Setting requests went unanswered, the third worked.
+  - The TM210 runs from the Pico's VBUS alone (5 V, 80 mA).
 - **Calibration commands** (CMD 23: CalibB, AN002 forced calibration, heading fix, compass calibration) affect only the TM210's own fused outputs. **We use raw data only, so the firmware never sends them.** INSLIB estimates the biases itself.
   - The user guide gives more reasons not to send them. A power loss during CalibB's 20 s flash write "may result in unrecoverable damage" ("Boot Mode"), and its success report (Calibration object type 0x14) asks for a power cycle afterwards ("Calibration").
   - The TM210 also sends Calibration objects (CMD 23) back as status reports, but only after a calibration command, so the parser never expects them.
@@ -122,7 +127,7 @@ An independent source for the same protocol: the AiO v4.5 autosteer firmware at 
 - **Writes need the node ID:** their TM171 answered requests sent to ID 0 but ignored every settings write sent that way. That agrees with writing to `toId = <node ID>`.
 - **Bytes 16–17: the two firmwares disagree.** Their unit read 0 there, and the renatorgr firmware concluded the TM171 has no Silent Time at that place. The firmware it was ported to, Balázs Gunics' V4.1 (https://github.com/gunicsba/AgOpenGPS_Boards, `TeensyModules/V4.1/Firmware/Autosteer_gps_teensy_v4_1/TM171.ino`, commit `f57c395`, read 2026-11-10), reads the same bytes as the **power-on silent time in seconds** (0–65, the lower half of the guide's 32-bit word) and writes it from its web page. That is our reading too, and ours read 1. "Still to do" item 7 settles it for the TM210.
 - **Calibration commands:** the V4.1 file also holds a table of the Calibration object's types, control values and keys (CMD 23). We never send them, so it is only a reference if that decision changes.
-- **Baud change:** after a write that changes the baud, they switch their UART 300 ms later. We plan 50 ms (provision step 2), so try both on the bench.
+- **Baud change:** after a write that changes the baud, they switch their UART 300 ms later. On our TM210 a baud change in RAM never takes effect (see "Baud" above), so the Pico no longer switches after a RAM write.
 
 **A third reader of the same packet format:** the AiO v26 Teensy firmware (https://github.com/AgOpenGPS-Official/Firmware_Teensy_AiO_26, `lib/TM171AiOParser/` and `lib/aio_navigation/IMUProcessor.cpp`, commit `2551bff`, read 2026-11-10, GPL v3). It only reads a TM171 and never writes its settings. Facts from its code; no code is taken.
 - **Framing and CRC agree with ours:** `AA 55`, a length byte, 4 header bytes, the payload, then a Modbus CRC-16 (little-endian) over everything between the `AA 55` and the CRC. The object ID is the low 7 bits of the first header byte.
@@ -162,14 +167,16 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
    - Only when the TM210 was found at 921600.
    - Compare the fields in the target table. Everything else is ignored, including bits 17/18, the sensor enables, the fusion fields, bytes 4–5, 8–9 and 14–15.
    - If they match and CMD 41 arrives at 800 ± 20 Hz over 1 s, configuration is done. Nothing is written to the TM210's flash, and boot takes about 1.3 s longer.
-3. **Provision.** Runs on any mismatch, or from the "Reconfigure IMU" button on the web page ([web-config-server.md](web-config-server.md)):
-   1. **Apply to RAM:** first a layout guard: write only if the read-back has switch bit 13 = 1, bits 14–16 = 0b010 and a baud word that matches the rate in use (the values read on our TM210 and on the AiO firmware's TM171). Otherwise report "layout not recognised" with the raw bytes and stay in the error state. Then build the target from the read-back with bit 17 = 1 and bit 18 = 0. Send it to the node ID at the current baud and wait up to 1.5 s for the Ack (`cmdAck = 21`). Retry up to 5×.
-   2. **New baud:** if the baud changed, switch UART0 to 921600 and wait 50 ms. Read the settings back: the target fields must match.
-   3. **Check the output:** only CMD 41 packets, at 800 ± 20 Hz over 2 s, with zero CRC errors.
+   - **Found at another baud, but the settings already hold the target with 921600:** the Pico saved it earlier and the TM210 has not been power-cycled since. Nothing is written; go to step 3.6.
+3. **Provision.** Runs on any other mismatch, or from the "Reconfigure IMU" button on the web page ([web-config-server.md](web-config-server.md)):
+   1. **Apply to RAM:** first a layout guard: write only if the read-back has switch bit 13 = 1, bits 14–16 = 0b010 and a baud word that matches the rate in use (the values read on our TM210 and on the AiO firmware's TM171). Otherwise report "layout not recognised" with the raw bytes and stay in the error state. Then build the target from the read-back with bit 17 = 1 and bit 18 = 0, **keeping the baud in use** (a new baud doesn't take effect from RAM). Send it to the node ID at the current baud and wait up to 1.5 s for the Ack (`cmdAck = 21`). Retry up to 5×.
+   2. **Read back** at the same baud: the target fields must match, with the baud word still at the rate in use.
+   3. **Check the output** (only when already at 921600): only CMD 41 packets, at 800 ± 20 Hz over 2 s, with zero CRC errors. At a lower baud 800 Hz doesn't fit the line, so this is skipped; the output is checked after the power cycle (step 2) instead, before the TM210 is used.
    4. **Commit to flash:**
-      - Send the same object with bit 18 = 1, wait for the Ack, and read it back once more.
-      - This only happens after step 3 has passed, so a bad setting never reaches flash. If anything fails before the commit, a power cycle returns the TM210 to its old flash settings.
-   5. Log that boot mode Auto applies from the next power cycle.
+      - Send the same object with bit 18 = 1 and the baud word set to 921600, wait for the Ack, and read it back once more (still at the old baud; the baud word must now read 921600).
+      - At 921600 this only happens after step 3 has passed, so a bad setting never reaches flash. If anything fails before the commit, a power cycle returns the TM210 to its old flash settings. At most 2 flash writes per boot.
+   5. Already at 921600: log that boot mode Auto applies from the next power cycle, and go to Run.
+   6. **Baud changed: wait for a power cycle.** The state is `power-cycle` and the error reads "921600 baud saved to flash: power-cycle the IMU". Detection runs again every 2 s. Until the TM210 is power-cycled it is found at the old baud with 921600 in its settings, and nothing more is written. After the power cycle it is found at 921600 and step 2 checks the output.
 4. **Run:** UART0 RX goes to the CMD 41 parser and the 1 Hz Status request starts ([imu-tm210.md](imu-tm210.md), "Firmware: reading the TM210"). Samples flow to the core 1 queue. Before "Run", INSLIB gets no IMU data.
 
 **How it's built:**
@@ -194,13 +201,16 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 - **With USB output off in flash (bit 20 = 0), the TM210 still answers Setting and Status requests over USB** and acknowledges a RAM write there, but it streams nothing. So USB is a recovery path even when bit 20 is off.
 - The target applied in RAM again on both hosts: 10 min of raw-only output at 802–803 packets per host second, with 0 CRC errors. Whole packets went missing over USB (684 on miniPi, 77 on the PC), most likely on the USB side. That was over USB, so item 1 below is still open, and it also shows whether the TM210 skips samples on its UART.
 
+**Done on dietpi (2026-11-13, Pico UART0, TM210 powered from VBUS):**
+- The Ack for a RAM write that changes the baud arrives at the old baud, but the new baud never becomes active (see "Baud" above). This was open item 1; the old provisioning got stuck on it, because its layout guard then saw a baud word that didn't match the rate in use.
+- 921600 saved to flash over USB (bit 18 = 1, acknowledged, read back with bit 18 set), then power-cycled: the Pico found it at 921600, the fast path passed with nothing written, and RUN gave 802–804 Hz CMD 41 with 0 CRC errors and 0 gaps. INSLIB ran in ATTITUDE_ONLY with a mean update of 96 µs (max 158 µs).
+- With USB connected, the Pico's UART requests went unanswered after a power cycle (see "USB" above).
+
 **Still to do:**
-1. **UART link:** with the Pico's UART0 (or a USB-UART adapter) on the TM210's UART, provision from 115200 and check:
-   - whether the Ack arrives at the old or the new baud, and how soon after the Ack the new baud is active
-   - 800 ± 20 Hz CMD 41 at 921600 with zero CRC errors over 10 minutes.
-2. **Factory-default TM210:** provisioned with no user action.
-3. **Power-cycle:** the fast path passes and there is no flash write. The flash commit (bit 18 = 1) has not yet been exercised by our code.
+1. **UART link:** 800 ± 20 Hz CMD 41 at 921600 with zero CRC errors over 10 minutes.
+2. **Factory-default TM210 (115200):** the Pico applies the target in RAM, saves 921600 to flash and asks for a power cycle; after it the fast path passes. The flash write and the `power-cycle` state are not yet tested by our code (the bench flash write above was done over USB by a script).
+3. **Power-cycle:** the fast path passes and there is no flash write (passed once, 2026-11-13). A flash commit at 921600 (bit 18 = 1) has not yet been exercised by our code.
 4. **Mismatch:** turn RPY on in ImuAssistant and save. On the next boot it is detected and corrected.
 5. **Interrupted provisioning:** remove power between steps 3.1 and 3.4. The next boot finds the old flash settings and provisions again.
-6. **USB debugging:** ImuAssistant on USB sees data while the Pico reads the TM210's UART.
+6. **USB debugging:** ImuAssistant on USB sees data while the Pico reads the TM210's UART. With USB connected the UART sometimes ignored requests (2026-11-13), so find out when that happens.
 7. **Silent Time:** confirm bytes 16–17 are Silent Time in seconds. Set it to 2 in flash, power-cycle, and time the first packet.
