@@ -11,6 +11,7 @@ The target system (see `plans/README.md` for the index):
 - **Sensors:** Unicore UM980 or UM982 GNSS on a ready-made module (USB-C = COM3 for a PC, COM1/COM2 UART pins, PPS, 5 V; 20 Hz binary logs on UART1 → COM1, PPS on a GPIO). The model is detected at boot; the antenna mode (single, or dual with GNSS heading on a UM982) is a compile-time default the web page can override, applied after a reboot (`plans/gnss-um98x-config.md`). Also a TM210 IMU (800 Hz raw data only on UART0 at 921600; the MCU configures it at boot, `plans/imu-tm210-config.md`, and never sends TM210 calibration commands), BMP581 barometer (100 Hz on I2C1).
 - **Filter:** INSLIB `nav_suite` (`external/INSLIB`). It needs no heap, all its state sits in `nav_suite_t`, and its worst-case stack is about 13 KB (`plans/inslib-nav-suite.md`).
 - **Links:** BLE NUS (Classic SPP as fallback) to SW Maps on Android carries NMEA out at 10 Hz and RTCM in. Each CRC-checked RTCM frame goes to the receiver's COM1 on UART1, the same port that carries commands and logs (`plans/rtcm-over-bluetooth.md`). The Pico uses only COM1 (COM3 is the module's USB-C, left for a PC; COM2 goes to the Zero 2 W companion if fitted), and no receiver port is ever locked (`CONFIG RXTYPE` risks bricking it). The MCU configures the receiver itself at boot (`plans/gnss-um98x-config.md`).
+- **Wi-Fi web server** for diagnostics and configuration (`plans/web-config-server.md`). During development it is always on and joins the open network `TeliaGateway` as a station; an open access point `gnss_smart` comes later, and a GPIO22 switch for production after that.
 - **On hold:** W5500 Ethernet / `$PAOGI` output. Its pins (SPI0, GP16–21) stay reserved, so don't assign them to anything else.
 
 ## Core split (applies to all firmware code)
@@ -18,11 +19,11 @@ The target system (see `plans/README.md` for the index):
 - **Core 1:** only the INSLIB filter, in a plain loop with nothing that preempts it. It pops samples from a core 0 queue and makes one `nav_suite_update()` call per IMU sample (800/s). Every 100 ms it publishes its outputs for core 0 to read.
 - **Core 0:** UART DMA, the sensor parsers, the BMP581 driver, Bluetooth (BTstack via `pico_cyw43_arch_threadsafe_background`) and the RTCM forwarder. Write this code as separate modules with queues between them, so a later move to FreeRTOS stays small.
 - Take sample timestamps (`time_us_64()`) in the ISR or DMA-complete handler, not when the sample is processed. INSLIB handles measurement delay but needs accurate capture times.
-- Put the filter's hot path in SRAM (`__not_in_flash_func` / `copy_to_ram`) for deterministic timing.
+- Put the filter's hot path and the timestamping ISRs in SRAM (`__not_in_flash_func` or RAM section placement) for deterministic timing. A whole-image `copy_to_ram` build won't fit once Wi-Fi is linked in (`plans/web-config-server.md`, "Memory layout").
 
 ## Firmware layout and build
 
-- `firmware/CMakeLists.txt` is the project (board `pico2_w`, `copy_to_ram`, stdio on USB only, because UART0 is the TM210).
+- `firmware/CMakeLists.txt` is the project (board `pico2_w`, `copy_to_ram` for now, moving to a flash binary with the hot path in SRAM before Wi-Fi is added; stdio on USB only, because UART0 is the TM210).
 - `firmware/app/`: `main.c` (core 0 loop and the 1 Hz status report), `nav_core1.c` (the filter on core 1 and its queues), `app_config.h` (mounting, noise figures, options).
 - **Every pin, bus instance and baud rate is in `firmware/app/board_pins.h`.** No other file names a GPIO number; drivers get their pins through their config structs.
 - `firmware/drivers/`: `uart_dma` (DMA ring receive, polled transmit), `tm210` and `um980` (parser plus boot check/provision state machine each; `um980` drives both the UM980 and the UM982), `bmp581`, `inslib` (CMake wrapper around `external/INSLIB`).

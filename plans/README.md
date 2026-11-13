@@ -17,7 +17,7 @@ Planning documents for gnss_smart: system architecture, hardware selection (MCU,
 | [gnss-um98x-config.md](gnss-um98x-config.md) | UM980 / UM982 auto-configuration by the MCU: single/dual antenna mode (compile-time default, web override, applied at reboot), per-mode command set, boot check/provision state machine, COM1 shared by commands and RTCM, dual-antenna heading into INSLIB `m.yaw`, receiver firmware builds and what their change logs mean here |
 | [rtcm-over-bluetooth.md](rtcm-over-bluetooth.md) | RTCM from SW Maps (Android NTRIP) over Bluetooth to UM980 COM1; replaces the radio |
 | [rtos-decision.md](rtos-decision.md) | Bare metal first, FreeRTOS later |
-| [web-config-server.md](web-config-server.md) | GPIO-toggled web config and diagnostics server |
+| [web-config-server.md](web-config-server.md) | Web config and diagnostics: always on in development (station on `TeliaGateway`), open AP `gnss_smart` later, GPIO22 switch for production; flash memory layout with the hot path in SRAM |
 
 ## On hold
 These plans are not part of the current build, but they are kept for later.
