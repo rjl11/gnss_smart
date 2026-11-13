@@ -54,6 +54,14 @@ git submodule update --init --recursive
 
 Not a submodule: `external/syd_dynamics` is a plain vendored copy of SYD Dynamics' TransducerM examples and the TM210 3D model. It is the EasyProfile protocol reference for the TM210 (see its `README.md`), and it is not compiled. `temp/` is git-ignored scratch space.
 
+## Build host (DietPi, ROCK 4SE)
+
+A second Linux build host on the LAN: `ssh dietpi@192.168.1.51` (OpenSSH with a key, passwordless sudo). It is a Radxa ROCK 4SE (aarch64, 6 cores, 3.8 GB RAM, no swap, 29 GB SD card) on DietPi / Debian 13. It has none of miniPi's memory limits, so a normal parallel build is fine.
+
+- Repo clone in `~/gnss_smart` (on `main`, pulls from `origin`), Pico SDK 2.3.1 in `~/pico-sdk` (`PICO_SDK_PATH` set in `~/.bashrc`), picotool 2.3.1 in `/usr/local/bin`, Debian's `arm-none-eabi-gcc` 14.2, cmake 3.31.
+- No ninja: configure without `-G Ninja` (Unix Makefiles) and build with `make -C firmware/build -j6`, or `sudo apt install ninja-build` first.
+- Not on Tailscale, so reach it from the LAN only. Its host key changed on 2026-11-13 after a reinstall.
+
 ## Build host (miniPi)
 
 Pico SDK builds run on `miniPi`, a Raspberry Pi with only 415 MB of RAM, which you reach as `ssh robert@miniPi` over Tailscale. The SDK is in `~/pico/pico-sdk` (2.3.1), picotool 2.3.1 is in `~/.local/bin`, and `~/pico/pico-examples` is the test project.
