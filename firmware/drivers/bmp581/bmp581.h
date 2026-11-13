@@ -83,8 +83,9 @@ typedef struct {
     volatile uint32_t drdy_missed;
 } bmp581_t;
 
-/* Fills in defaults: i2c1 on GP2/GP3 at 400 kHz, address probed (0), no INT pin,
- * 100.2 Hz, OSR_P 8x, OSR_T 1x, IIR bypassed, 1 ms poll interval. */
+/* Fills in defaults: i2c1 at 400 kHz with no SDA/SCL pins (-1, so the bus is
+ * left alone unless the caller sets them from board_pins.h), address probed (0),
+ * no INT pin, 100.2 Hz, OSR_P 8x, OSR_T 1x, IIR bypassed, 1 ms poll interval. */
 void bmp581_default_config(bmp581_config_t *cfg);
 
 /* Sets up the bus (if pins are given), soft-resets and configures the sensor,

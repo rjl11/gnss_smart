@@ -145,8 +145,8 @@ void bmp581_default_config(bmp581_config_t *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
     cfg->i2c = i2c1;
-    cfg->sda_pin = 2;            /* GP2 = I2C1 SDA */
-    cfg->scl_pin = 3;            /* GP3 = I2C1 SCL */
+    cfg->sda_pin = -1;           /* pins come from board_pins.h via the caller */
+    cfg->scl_pin = -1;
     cfg->baud_hz = 400000;
     cfg->addr = 0; /* probe: breakouts differ (Adafruit-style boards strap SDO high = 0x47) */
     cfg->int_pin = -1;
