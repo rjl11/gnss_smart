@@ -4,6 +4,7 @@
  *
  * These are suggested assignments (plans/rp2350-feasibility.md fixes only the
  * peripherals, not the pins). Change them here to match the wiring.
+ * Header pin numbers and alternate functions: docs/pico2w-pinout.svg.
  *
  *   GP0   UART0 TX  -> TM210 RXD
  *   GP1   UART0 RX  <- TM210 TXD
