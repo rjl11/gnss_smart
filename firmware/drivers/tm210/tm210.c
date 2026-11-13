@@ -359,6 +359,17 @@ static bool handle_packet(tm210_t *t, tm210_sample_t *out)
 
 /* ---- State machine ----------------------------------------------------- */
 
+static void log_setting(const tm210_t *t, const char *what)
+{
+    if (t->cfg.verbose) {
+        printf("[tm210] %s. Setting bytes:", what);
+        for (int i = 0; i < TM210_SETTING_LEN; i++) {
+            printf(" %02x", t->setting[i]);
+        }
+        printf("\n");
+    }
+}
+
 static void enter(tm210_t *t, tm210_state_t s)
 {
     if (t->state != s) {
@@ -537,13 +548,7 @@ static void step(tm210_t *t, uint64_t now)
     case TM210_ST_APPLY:
         if (t->step == 0 && t->retries == 0 && !layout_recognised(t)) {
             t->last_error = TM210_E_LAYOUT;
-            if (t->cfg.verbose) {
-                printf("[tm210] layout not recognised, nothing written. Setting bytes:");
-                for (int i = 0; i < TM210_SETTING_LEN; i++) {
-                    printf(" %02x", t->setting[i]);
-                }
-                printf("\n");
-            }
+            log_setting(t, "layout not recognised, nothing written");
             enter(t, TM210_ST_ERROR);
             break;
         }
@@ -577,7 +582,11 @@ static void step(tm210_t *t, uint64_t now)
 
     case TM210_ST_READBACK:
         r = readback_step(t, now);
-        if (r < 0 || (r > 0 && !settings_match(t->setting))) {
+        if (r < 0) {
+            LOG(t, "no Setting reply at %u baud after the write", t->baud);
+            fail(t, now, TM210_E_READBACK);
+        } else if (r > 0 && !settings_match(t->setting)) {
+            log_setting(t, "read back differs from the target");
             fail(t, now, TM210_E_READBACK);
         } else if (r > 0) {
             enter(t, TM210_ST_VERIFY_OUTPUT);
@@ -610,7 +619,11 @@ static void step(tm210_t *t, uint64_t now)
 
     case TM210_ST_COMMIT_READBACK:
         r = readback_step(t, now);
-        if (r < 0 || (r > 0 && !settings_match(t->setting))) {
+        if (r < 0) {
+            LOG(t, "no Setting reply after the flash write");
+            fail(t, now, TM210_E_READBACK);
+        } else if (r > 0 && !settings_match(t->setting)) {
+            log_setting(t, "read back after the flash write differs from the target");
             fail(t, now, TM210_E_READBACK);
         } else if (r > 0) {
             t->need_commit = false;
