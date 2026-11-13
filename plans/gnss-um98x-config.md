@@ -133,7 +133,7 @@ What this means here:
 Read 2026-11-13. None of these items changes the target configuration; they are candidates and facts for later decisions.
 - **Anti-spoofing:** `CONFIG ANTISPOOF ENABLE|DISABLE` (§4.9, Table 4-10). The default is DISABLE. It is listed for the UM980 and UM982; R1.16 added the UM980.
   - The log is `SPOOFINFO` (msg ID 530, §7.5.93, Table 7-163), 1 Hz, listed for the UM982 only. Fields: a spoofing flag (0/1); SpoofNoticeMask (bit 0 position anomaly, bit 1 time, bit 2 tracked satellites, bit 3 signal source); TimeNoticeMask (GPS/BDS/GAL/GLO time reset bits); the affected signals as a bit mask (Table 7-164); and one 64-bit satellite mask per constellation. The second field is named "Pos type" but described as the number of tracked satellites; the manual's example has `NARROW_INT` there, so read it as a position type.
-  - Whether the UM980 (build 25621, whose notes mention "anti-spoofing detection with warning messages") outputs SPOOFINFO is a bench check.
+  - The UM980 (build 25621) outputs SPOOFINFO too, with ANTISPOOF off or on, and the second field is the position type (bench results 2026-11-13, UM980 SPOOFINFO).
 - **PVT reliability:** `CONFIG PVT RELIABILITY <horizontal> <vertical> <doppler velocity>` (§4.36, Table 4-46). Each is 1 normal (default), 2 strict or 3 very strict. It applies to the single-point solution only, on the UM982 from build 17746 (ours is 18975). Not sent; a candidate if bad standalone epochs reach the filter.
 - **PPSSTATUS** (msg ID 9000, §7.5.82, Table 7-152): 1 Hz, UM980 and UM982. Fields: status (0 no pulse, 1 pulse without guaranteed accuracy, 2 about 100–1000 ns, 3 better than 100 ns), the PPS GPS week and ms, the pulse phase error in ns, the offset to the observation time, and the PPS configuration. A candidate for gating the PPS time anchor and for the diagnostics page; not in the log set yet (about 24 + 60 + 4 B/s if added). The UM980 outputs it (bench results 2026-11-13, UM980 PPSSTATUS).
 - **PPS keeps running after the fix is lost:** with `ENABLE`, PPS starts after the position is fixed and PPS has converged, and it continues for about 30 s after positioning stops (§4.32, Table 4-41). A PPS edge alone therefore doesn't prove a current fix; the parser still needs BESTNAVB's solution status. The manual lists `ENABLE` as the default, yet the UM982 shipped with `PPS DISABLE`. Valid periods are 50, 100, 200 … 20000 ms; UserDelay is ±100 000 000 ns.
@@ -316,7 +316,7 @@ Not done yet:
    - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value. On the UM980 (already warm) it read about 60 000 and rose from 59.9 to 61.1 over 10 min (bench results 2026-11-12, UM980 gap capture), which fits °C × 1000. A one-shot `HWSTATUSA COM3` on 2026-11-13, with only its five 1 Hz NMEA logs running, read 56 204 (about 56.2 °C; supplies 0.908, 1.014, 1.805 V). The cold-start reading and the thermometer check are still open.
    - The UNIHEADING position-type values that mean a fixed heading, and the heading latency against BESTNAV in the same epoch.
    - FIXLENGTH, VARIABLELENGTH and TRACTOR against each other on the rigid bar (heading σ, time to fixed heading, behaviour when ANT2 is shadowed), and what `CONFIG` shows after TRACTOR then VARIABLELENGTH are sent (the AgOpenGPS file sends both).
-   - Whether each receiver outputs `SPOOFINFOB` (listed for the UM982 only) and `PPSSTATUSB`, and what PPSSTATUS reports before the fix, at RTK fixed and in the 30 s after the antenna is disconnected. The UM980 outputs PPSSTATUSB and reads status 3 with a single fix (bench results 2026-11-13, UM980 PPSSTATUS); before the fix, the holdover, RTK fixed and the UM982 are still open.
+   - Whether each receiver outputs `SPOOFINFOB` (listed for the UM982 only) and `PPSSTATUSB`, and what PPSSTATUS reports before the fix, at RTK fixed and in the 30 s after the antenna is disconnected. The UM980 outputs PPSSTATUSB and reads status 3 with a single fix (bench results 2026-11-13, UM980 PPSSTATUS); before the fix, the holdover, RTK fixed and the UM982 are still open. The UM980 also outputs SPOOFINFOB, all zeros indoors with ANTISPOOF off or on (bench results 2026-11-13, UM980 SPOOFINFO); the UM982 is still open.
    - What Identify should do with a module built on a UM980C / UM982C / UM982A (VERSION types 64, 65, 94), if one turns up.
    - The 5 V current of each module at 20 Hz (the UM982 datasheet's 600 mW is for 10 Hz), and the module's COM1 and PPS logic level (3.3 V expected).
 
@@ -558,6 +558,22 @@ Same UM980 (R4.10Build25621, SG 2) on miniPi over COM3 at 115200, antenna indoor
 - **PPSSTATUS works on the UM980** and reads status 3 with a single fix indoors, so status 3 doesn't need RTK.
 - **Still open:** what it reports before the first fix and in the 30 s after the antenna is pulled (the holdover), and the same check on the UM982. Both need someone at the bench to plug and unplug the antenna.
 - Script: `~/pico/ppsstatus.py` on miniPi (the `sgtest2.py` helpers, `termios`), output in `~/pico/ppsstatus.log`.
+
+## Bench results (2026-11-13, UM980 SPOOFINFO)
+Same UM980 (R4.10Build25621, SG 2) on miniPi over COM3 at 115200, antenna indoors. The script read `CONFIG`, sent `UNLOG COM3` (not saved) and one `SPOOFINFOA COM3`, then recorded `SPOOFINFOB COM3 1` and `BESTNAVB COM3 1` for 60 s with the saved setting. It then sent `CONFIG ANTISPOOF ENABLE` (not saved), recorded another 60 s, and sent `RESET`. Afterwards `CONFIG` showed the 21 saved lines again and `UNILOGLIST` the five NMEA logs.
+
+| Item | Saved setting (no ANTISPOOF line) | After `CONFIG ANTISPOOF ENABLE` |
+|---|---|---|
+| `CONFIG` | 21 lines, `ANTIJAM AUTO`, no ANTISPOOF line | 22 lines: `$CONFIG,ANTISPOOF,CONFIG ANTISPOOF ENABLE 1` added |
+| SPOOFINFOB | 60 frames, 0 CRC errors, body 136 bytes (Table 7-163) | the same |
+| Contents | position type 16 (`SINGLE`), monitor 0, every mask 0, every frame | the same |
+| BESTNAVB | `SOL_COMPUTED` / `SINGLE` in every epoch | the same |
+
+- **The UM980 outputs SPOOFINFO**, although §7.5.93 lists only the UM982, and it does so with anti-spoofing off as well as on.
+- **The second field is the position type**, as the manual's example shows (`SINGLE` in ASCII, 16 in binary), not the number of tracked satellites the table describes.
+- **`CONFIG` lists the setting as `ANTISPOOF ENABLE 1`**, with a trailing parameter the manual doesn't document. The fast-path check would have to match that form if the setting is ever added to the target table.
+- **Not tested:** whether the receiver flags anything. Nothing was flagged in either run, which is expected indoors with no spoofer. With all zeros in both runs, the frames don't show whether detection works with ANTISPOOF off.
+- Script: `~/pico/spoofinfo.py` on miniPi, output in `~/pico/spoofinfo.log`.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
