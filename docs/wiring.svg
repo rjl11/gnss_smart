@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1140" width="1200" height="1140" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<rect width="1200" height="1140" fill="#ffffff"/>
+<g transform="translate(50,0)">
+<text x="-20" y="42" font-size="22" text-anchor="start" fill="#1f2937" font-weight="bold" >gnss_smart: wiring to the Pico 2 W</text>
+<text x="-20" y="64" font-size="12" text-anchor="start" fill="#6b7280" font-weight="normal" >Pin map from firmware/app/board_pins.h (suggested assignments). Board viewed from the top, USB at the top. Physical header pin numbers in grey.</text>
+<rect x="540" y="150" width="160" height="670" rx="10" fill="#0b6b3a" stroke="#064e2a" stroke-width="2"/>
+<rect x="594.0" y="136" width="52" height="30" rx="4" fill="#c7ccd1" stroke="#8a9096"/>
+<text x="620.0" y="184" font-size="14" text-anchor="middle" fill="#ffffff" font-weight="bold" >Pico 2 W</text>
+<circle cx="552" cy="190" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="194" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP0</text>
+<circle cx="552" cy="220" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="224" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP1</text>
+<circle cx="552" cy="250" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="254" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GND</text>
+<circle cx="552" cy="280" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="284" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP2</text>
+<circle cx="552" cy="310" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="314" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP3</text>
+<circle cx="552" cy="340" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="344" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP4</text>
+<circle cx="552" cy="370" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="374" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP5</text>
+<circle cx="552" cy="400" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="404" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GND</text>
+<circle cx="552" cy="430" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="434" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP6</text>
+<circle cx="552" cy="460" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="464" font-size="11" text-anchor="start" fill="#ffffff" font-weight="bold" >GP7</text>
+<circle cx="552" cy="490" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="494" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP8</text>
+<circle cx="552" cy="520" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="524" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP9</text>
+<circle cx="552" cy="550" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="554" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GND</text>
+<circle cx="552" cy="580" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="584" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP10</text>
+<circle cx="552" cy="610" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="614" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP11</text>
+<circle cx="552" cy="640" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="644" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP12</text>
+<circle cx="552" cy="670" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="674" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP13</text>
+<circle cx="552" cy="700" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="704" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GND</text>
+<circle cx="552" cy="730" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="734" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP14</text>
+<circle cx="552" cy="760" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="564" y="764" font-size="11" text-anchor="start" fill="#a7c4b3" font-weight="normal" >GP15</text>
+<circle cx="688" cy="190" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="194" font-size="11" text-anchor="end" fill="#ffffff" font-weight="bold" >VBUS</text>
+<circle cx="688" cy="220" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="224" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >VSYS</text>
+<circle cx="688" cy="250" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="254" font-size="11" text-anchor="end" fill="#ffffff" font-weight="bold" >GND</text>
+<circle cx="688" cy="280" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="284" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >3V3_EN</text>
+<circle cx="688" cy="310" r="6.5" fill="#e5c55a" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="314" font-size="11" text-anchor="end" fill="#ffffff" font-weight="bold" >3V3(OUT)</text>
+<circle cx="688" cy="340" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="344" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >ADC_VREF</text>
+<circle cx="688" cy="370" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="374" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >GP28</text>
+<circle cx="688" cy="400" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="404" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >GND</text>
+<circle cx="688" cy="430" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="434" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >GP27</text>
+<circle cx="688" cy="460" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="464" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >GP26</text>
+<circle cx="688" cy="490" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="494" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >RUN</text>
+<circle cx="688" cy="520" r="6.5" fill="#f2c46d" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="524" font-size="11" text-anchor="end" fill="#fde68a" font-weight="bold" >GP22</text>
+<circle cx="688" cy="550" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="554" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >GND</text>
+<circle cx="688" cy="580" r="6.5" fill="#f2c46d" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="584" font-size="11" text-anchor="end" fill="#fde68a" font-weight="bold" >GP21</text>
+<circle cx="688" cy="610" r="6.5" fill="#f2c46d" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="614" font-size="11" text-anchor="end" fill="#fde68a" font-weight="bold" >GP20</text>
+<circle cx="688" cy="640" r="6.5" fill="#f2c46d" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="644" font-size="11" text-anchor="end" fill="#fde68a" font-weight="bold" >GP19</text>
+<circle cx="688" cy="670" r="6.5" fill="#f2c46d" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="674" font-size="11" text-anchor="end" fill="#fde68a" font-weight="bold" >GP18</text>
+<circle cx="688" cy="700" r="6.5" fill="#9fb5a8" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="704" font-size="11" text-anchor="end" fill="#a7c4b3" font-weight="normal" >GND</text>
+<circle cx="688" cy="730" r="6.5" fill="#f2c46d" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="734" font-size="11" text-anchor="end" fill="#fde68a" font-weight="bold" >GP17</text>
+<circle cx="688" cy="760" r="6.5" fill="#f2c46d" stroke="#7a6420" stroke-width="1"/>
+<text x="676" y="764" font-size="11" text-anchor="end" fill="#fde68a" font-weight="bold" >GP16</text>
+<circle cx="590.0" cy="804" r="5.5" fill="#e5c55a" stroke="#7a6420"/>
+<text x="590.0" y="793" font-size="8.5" text-anchor="middle" fill="#ffffff" font-weight="bold" >SWCLK</text>
+<circle cx="620.0" cy="804" r="5.5" fill="#e5c55a" stroke="#7a6420"/>
+<text x="620.0" y="793" font-size="8.5" text-anchor="middle" fill="#ffffff" font-weight="bold" >GND</text>
+<circle cx="650.0" cy="804" r="5.5" fill="#e5c55a" stroke="#7a6420"/>
+<text x="650.0" y="793" font-size="8.5" text-anchor="middle" fill="#ffffff" font-weight="bold" >SWDIO</text>
+<rect x="170" y="150" width="190" height="122" rx="8" fill="#f8fafc" stroke="#2563eb" stroke-width="2"/>
+<rect x="170" y="150" width="190" height="26" rx="8" fill="#2563eb"/>
+<rect x="170" y="166" width="190" height="10" fill="#2563eb"/>
+<text x="265.0" y="168" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold" >TM210 IMU</text>
+<text x="265.0" y="266" font-size="10" text-anchor="middle" fill="#6b7280" font-weight="normal" >PH2.0-5 connector</text>
+<polyline points="360,190 552,190" fill="none" stroke="#2563eb" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="352" y="194" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >RXD</text>
+<path d="M456.0,185 L444.0,190 L456.0,195" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="360,220 552,220" fill="none" stroke="#2563eb" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="352" y="224" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >TXD</text>
+<path d="M444.0,215 L456.0,220 L444.0,225" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="360,250 552,250" fill="none" stroke="#111827" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="352" y="254" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >GND</text>
+<text x="450.0" y="183" font-size="10" text-anchor="middle" fill="#2563eb" font-weight="normal" >UART0 TX</text>
+<text x="450.0" y="213" font-size="10" text-anchor="middle" fill="#2563eb" font-weight="normal" >UART0 RX  · 921600 baud</text>
+<polyline points="170,220 142,220" fill="none" stroke="#dc2626" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="178" y="224" font-size="11" text-anchor="start" fill="#1f2937" font-weight="bold" >5V</text>
+<path d="M110.6,210 H134 L142,220 L134,230 H110.6 Z" fill="#dc2626"/>
+<text x="122.3" y="224" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >5V</text>
+<rect x="40" y="240" width="160" height="300" rx="8" fill="#f8fafc" stroke="#15803d" stroke-width="2"/>
+<rect x="40" y="240" width="160" height="26" rx="8" fill="#15803d"/>
+<rect x="40" y="256" width="160" height="10" fill="#15803d"/>
+<text x="120.0" y="258" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold" >BMP581 baro</text>
+<text x="120.0" y="516" font-size="10.5" text-anchor="middle" fill="#6b7280" font-weight="normal" >I2C addr 0x46</text>
+<text x="120.0" y="530" font-size="10.5" text-anchor="middle" fill="#6b7280" font-weight="normal" >(SDO to GND)</text>
+<polyline points="200,280 552,280" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="192" y="284" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >SDA</text>
+<path d="M255,275 L243,280 L255,285" fill="none" stroke="#15803d" stroke-width="2.2" stroke-linejoin="round"/>
+<path d="M255,275 L267,280 L255,285" fill="none" stroke="#15803d" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="200,310 552,310" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="192" y="314" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >SCL</text>
+<path d="M261,305 L249,310 L261,315" fill="none" stroke="#15803d" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="200,460 552,460" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="192" y="464" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >INT</text>
+<path d="M249,455 L261,460 L249,465" fill="none" stroke="#15803d" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="470" y="273" font-size="10" text-anchor="middle" fill="#15803d" font-weight="normal" >I2C1 SDA</text>
+<text x="470" y="303" font-size="10" text-anchor="middle" fill="#15803d" font-weight="normal" >I2C1 SCL · 400 kHz</text>
+<text x="480" y="476" font-size="10" text-anchor="middle" fill="#15803d" font-weight="normal" >INT (edge timestamp)</text>
+<polyline points="40,350 36,350" fill="none" stroke="#ea580c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="48" y="354" font-size="11" text-anchor="start" fill="#1f2937" font-weight="bold" >VDD</text>
+<polyline points="40,380 36,380" fill="none" stroke="#ea580c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="48" y="384" font-size="11" text-anchor="start" fill="#1f2937" font-weight="bold" >VDDIO</text>
+<polyline points="40,410 36,410" fill="none" stroke="#111827" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="48" y="414" font-size="11" text-anchor="start" fill="#1f2937" font-weight="bold" >GND</text>
+<path d="M-2.6000000000000014,340 H28 L36,350 L28,360 H-2.6000000000000014 Z" fill="#ea580c"/>
+<text x="12.7" y="354" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >3V3</text>
+<path d="M-2.6000000000000014,370 H28 L36,380 L28,390 H-2.6000000000000014 Z" fill="#ea580c"/>
+<text x="12.7" y="384" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >3V3</text>
+<path d="M-2.6000000000000014,400 H28 L36,410 L28,420 H-2.6000000000000014 Z" fill="#111827"/>
+<text x="12.7" y="414" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >GND</text>
+<rect x="268" y="300" width="152" height="148" rx="8" fill="#f8fafc" stroke="#9333ea" stroke-width="2"/>
+<rect x="268" y="300" width="152" height="26" rx="8" fill="#9333ea"/>
+<rect x="268" y="316" width="152" height="10" fill="#9333ea"/>
+<text x="344.0" y="318" font-size="12" text-anchor="middle" fill="#fff" font-weight="bold" >UM980 / UM982 module</text>
+<polyline points="420,340 552,340" fill="none" stroke="#9333ea" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="412" y="344" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >COM1 RX</text>
+<path d="M491,335 L479,340 L491,345" fill="none" stroke="#9333ea" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="420,370 552,370" fill="none" stroke="#9333ea" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="412" y="374" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >COM1 TX</text>
+<path d="M479,365 L491,370 L479,375" fill="none" stroke="#9333ea" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="420,400 552,400" fill="none" stroke="#111827" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="412" y="404" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >GND</text>
+<polyline points="420,430 552,430" fill="none" stroke="#9333ea" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="412" y="434" font-size="11" text-anchor="end" fill="#1f2937" font-weight="bold" >PPS</text>
+<path d="M479,425 L491,430 L479,435" fill="none" stroke="#9333ea" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="485" y="333" font-size="10" text-anchor="middle" fill="#9333ea" font-weight="normal" >UART1 TX</text>
+<text x="485" y="363" font-size="10" text-anchor="middle" fill="#9333ea" font-weight="normal" >UART1 RX · 460800</text>
+<text x="485" y="423" font-size="10" text-anchor="middle" fill="#9333ea" font-weight="normal" >GPIO in</text>
+<polyline points="268,400 254,400" fill="none" stroke="#dc2626" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="276" y="404" font-size="11" text-anchor="start" fill="#1f2937" font-weight="bold" >5V</text>
+<path d="M222.6,390 H246 L254,400 L246,410 H222.6 Z" fill="#dc2626"/>
+<text x="234.29999999999998" y="404" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >5V</text>
+<polyline points="688,190 750,190" fill="none" stroke="#dc2626" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M750,190 L758,180 H781.4 V200 H758 Z" fill="#dc2626"/>
+<text x="769.7" y="194" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >5V</text>
+<polyline points="688,250 750,250" fill="none" stroke="#111827" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M750,250 L758,240 H788.6 V260 H758 Z" fill="#111827"/>
+<text x="773.3" y="254" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >GND</text>
+<polyline points="688,310 750,310" fill="none" stroke="#ea580c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M750,310 L758,300 H788.6 V320 H758 Z" fill="#ea580c"/>
+<text x="773.3" y="314" font-size="11.5" text-anchor="middle" fill="#fff" font-weight="bold" >3V3</text>
+<text x="812" y="194" font-size="11" text-anchor="start" fill="#dc2626" font-weight="normal" >VBUS: 5 V from the Pico's USB → TM210, GNSS module</text>
+<text x="812" y="254" font-size="11" text-anchor="start" fill="#111827" font-weight="normal" >GND: any Pico GND pin (3, 8, 13, 18, 23, 28, 33, 38)</text>
+<text x="812" y="314" font-size="11" text-anchor="start" fill="#ea580c" font-weight="normal" >3V3(OUT): 3.3 V regulator → BMP581 only</text>
+<polyline points="688,520 760,520 760,526" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 4"/>
+<polyline points="760,544 760,550 688,550" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 4"/>
+<line x1="760" y1="526" x2="772" y2="542" stroke="#6b7280" stroke-width="2"/>
+<circle cx="760" cy="526" r="2.5" fill="#6b7280"/><circle cx="760" cy="544" r="2.5" fill="#6b7280"/>
+<text x="786" y="522" font-size="11" text-anchor="start" fill="#1f2937" font-weight="bold" >Web-mode switch GP22 → GND (optional)</text>
+<text x="786" y="537" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="normal" >Only read by a -DWEB_MODE=switch build: closed at boot starts Wi-Fi.</text>
+<text x="786" y="551" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="normal" >Development builds (WEB_MODE=always) ignore it.</text>
+<path d="M740,570 h10 V770 h-10" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+<text x="762" y="664.0" font-size="11.5" text-anchor="start" fill="#b45309" font-weight="bold" >Reserved: GP16–GP21 (SPI0)</text>
+<text x="762" y="680.0" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="normal" >W5500 Ethernet, on hold. Leave unconnected.</text>
+<polyline points="590.0,804 590.0,880" fill="none" stroke="#f97316" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="620.0,804 620.0,880" fill="none" stroke="#111827" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="650.0,804 650.0,880" fill="none" stroke="#ca8a04" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="500.0" y="880" width="240.0" height="66" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+<rect x="500.0" y="880" width="240.0" height="26" rx="8" fill="#64748b"/>
+<rect x="500.0" y="896" width="240.0" height="10" fill="#64748b"/>
+<text x="620.0" y="898" font-size="13" text-anchor="middle" fill="#fff" font-weight="bold" >Debug Probe, D port (optional)</text>
+<text x="590.0" y="924" font-size="11" text-anchor="middle" fill="#1f2937" font-weight="bold" >SC</text>
+<text x="620.0" y="924" font-size="11" text-anchor="middle" fill="#1f2937" font-weight="bold" >GND</text>
+<text x="650.0" y="924" font-size="11" text-anchor="middle" fill="#1f2937" font-weight="bold" >SD</text>
+<text x="620.0" y="940" font-size="9.5" text-anchor="middle" fill="#6b7280" font-weight="normal" >orange · black · yellow</text>
+<text x="754.0" y="904" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="normal" >SWD: solder a 3-pin male header to</text>
+<text x="754.0" y="918" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="normal" >SWCLK / GND / SWDIO on the board edge.</text>
+<text x="532" y="194" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">1</text>
+<text x="532" y="224" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">2</text>
+<text x="532" y="254" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">3</text>
+<text x="532" y="284" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">4</text>
+<text x="532" y="314" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">5</text>
+<text x="532" y="344" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">6</text>
+<text x="532" y="374" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">7</text>
+<text x="532" y="404" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">8</text>
+<text x="532" y="434" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">9</text>
+<text x="532" y="464" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">10</text>
+<text x="532" y="494" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">11</text>
+<text x="532" y="524" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">12</text>
+<text x="532" y="554" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">13</text>
+<text x="532" y="584" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">14</text>
+<text x="532" y="614" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">15</text>
+<text x="532" y="644" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">16</text>
+<text x="532" y="674" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">17</text>
+<text x="532" y="704" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">18</text>
+<text x="532" y="734" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">19</text>
+<text x="532" y="764" font-size="10.5" text-anchor="end" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">20</text>
+<text x="708" y="194" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">40</text>
+<text x="708" y="224" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">39</text>
+<text x="708" y="254" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">38</text>
+<text x="708" y="284" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">37</text>
+<text x="708" y="314" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">36</text>
+<text x="708" y="344" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">35</text>
+<text x="708" y="374" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">34</text>
+<text x="708" y="404" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">33</text>
+<text x="708" y="434" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">32</text>
+<text x="708" y="464" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">31</text>
+<text x="708" y="494" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">30</text>
+<text x="708" y="524" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">29</text>
+<text x="708" y="554" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">28</text>
+<text x="708" y="584" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">27</text>
+<text x="708" y="614" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">26</text>
+<text x="708" y="644" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">25</text>
+<text x="708" y="674" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">24</text>
+<text x="708" y="704" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">23</text>
+<text x="708" y="734" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">22</text>
+<text x="708" y="764" font-size="10.5" text-anchor="start" fill="#6b7280" font-weight="bold" stroke="#ffffff" stroke-width="4" paint-order="stroke">21</text>
+<rect x="-20" y="980" width="1140" height="136" rx="8" fill="#fffbeb" stroke="#fcd34d"/>
+<text x="-2" y="1004" font-size="13.5" text-anchor="start" fill="#1f2937" font-weight="bold" >Before you power it up</text>
+<text x="-2" y="1028" font-size="11.5" text-anchor="start" fill="#1f2937" font-weight="normal" >• TX goes to RX: Pico GP0 (UART0 TX) → TM210 RXD, GP4 (UART1 TX) → GNSS COM1 RX, and the other way round for the RX pins.</text>
+<text x="-2" y="1047" font-size="11.5" text-anchor="start" fill="#1f2937" font-weight="normal" >• The GNSS module and the TM210 run from 5 V (VBUS). Their UART outputs and PPS must be 3.3 V logic: check the GNSS module's COM1 TX and PPS on the bench first.</text>
+<text x="-2" y="1066" font-size="11.5" text-anchor="start" fill="#1f2937" font-weight="normal" >• VBUS carries 5 V only while the Pico is powered from its USB port. Budget: GNSS module + antenna (not yet measured) + TM210 80 mA.</text>
+<text x="-2" y="1085" font-size="11.5" text-anchor="start" fill="#1f2937" font-weight="normal" >• Connect every ground: TM210 GND → pin 3, GNSS GND → pin 8, BMP581 GND → any GND pin. Keep the TM210 and UART wires short at 921600 baud.</text>
+<text x="-2" y="1104" font-size="11.5" text-anchor="start" fill="#1f2937" font-weight="normal" >• GNSS module: only COM1 goes to the Pico. COM2 stays unwired (reserved for the Zero 2 W companion); the USB-C port is COM3, free for a PC.</text>
+</g></svg>
