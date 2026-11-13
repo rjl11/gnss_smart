@@ -48,7 +48,15 @@ A cmake option `WEB_MODE` selects it, passed to the code as `APP_WEB_MODE` in `a
 ### Open access point `gnss_smart` (Phase 3)
 - `cyw43_arch_enable_ap_mode("gnss_smart", NULL, CYW43_AUTH_OPEN)`, fixed address 192.168.4.1/24. Open, with no password, by decision (see "Security").
 - Needs the small DHCP server from pico-examples (`pico_w/wifi/access_point/dhcpserver`), and optionally its DNS server so any hostname resolves to the device. Copy them into `firmware/drivers/` with their licence.
-- When to use it: if the station hasn't joined within about 30 s, or the config page selects AP. The exact rule (fall back and stay, or keep retrying the station in between) is settled when Phase 3 starts.
+- **When to use it (decided 2026-11-13): fall back and stay.** If the station hasn't had a link since boot within 30 s (`APP_WIFI_AP_FALLBACK_S`), the station is stopped and the AP runs until the next reboot. Nothing switches back, so no station join moves the AP's channel under connected phones. A station link that came up once and dropped later keeps retrying the station, as in Phase 2. The config page can select AP once Phase 4 exists.
+- cmake `-DWIFI_MODE=auto|sta|ap`: `auto` is the rule above (default), `sta` never starts the AP, `ap` runs the AP from boot (used to test it next to a working router).
+
+**Implemented (2026-11-13):** `start_ap()` in `firmware/app/web/web.c`. The servers are in `firmware/drivers/ap_servers/` (an INTERFACE library, so the sources compile with the app's `lwipopts.h`; vendor files unchanged, `-Wno-unused-parameter` for them only). DHCP hands out up to 8 addresses from 192.168.4.16; DNS answers every name with 192.168.4.1, so a phone's captive-portal check lands on the status page. mDNS also runs on the AP. The LED blinks fast in AP mode. The status line and `/status.json` show the AP SSID and `ap_clients`. Note: `cyw43_wifi_ap_get_stas()` with a NULL MAC buffer returns the maximum (10), not the count, so it is called with a buffer.
+
+**Bench results (2026-11-13, bare Pico 2 W):**
+- Fallback: built with a station SSID that doesn't exist. Join attempts failed with "network not found" (backoff 5, 10, 20 s), and at 33 s the log shows `no station link: open AP "gnss_smart"`. A scan from miniPi sees `gnss_smart` on channel 3 at −54 dBm, open (no Privacy bit, no RSN or WPA element).
+- Forced AP (`WIFI_MODE=ap`): AP up at boot, init 901 ms, `clients 0`.
+- **Not tested yet:** a phone joining, getting a 192.168.4.x lease and opening the page (no Wi-Fi on the bench PC, and miniPi's only uplink is its Wi-Fi).
 
 ### Over Ethernet (on hold with the W5500)
 The same pages could also be served over the W5500 (ioLibrary has a small HTTP server), so the device can be configured from the tractor network without Wi-Fi. See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
@@ -96,7 +104,7 @@ BLE and Wi-Fi can run together on the CYW43439, but they share airtime and RAM. 
 - Output: rate, Bluetooth device name, BLE (NUS) or Classic SPP, message format.
 - Ethernet (on hold): IP address, mask, destination address and port (default 192.168.5.124 /24 → 192.168.5.255:9999). The output sentence is always `$PAOGI`. See [ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md).
 - Sensor setup: the UART baud rates are fixed (460800 for the UM980/UM982, 921600 for the TM210) and not configurable. The receiver configuration is checked at boot and re-provisioned on a mismatch ([gnss-um98x-config.md](gnss-um98x-config.md)). A "Reconfigure GNSS" button forces a full re-provision (`FRESET` and the whole sequence). In the same way, the TM210 is checked at boot ([imu-tm210-config.md](imu-tm210-config.md)), and a "Reconfigure IMU" button forces its provisioning sequence.
-- Wi-Fi: station SSID and password (default from the build), station or AP, AP fallback on/off.
+- Wi-Fi: station SSID and password (default from the build), mode auto / station / AP (default from `WIFI_MODE`).
 - Buttons: save, revert to defaults, reboot.
 
 ## Storing configuration

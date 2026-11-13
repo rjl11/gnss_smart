@@ -214,9 +214,12 @@ static void print_status(uint64_t now, uint32_t baro_hz)
     web_info_t wi;
     web_get_info(&wi);
     const uint8_t *ip = (const uint8_t *)&wi.ip;
-    printf("WIFI  %-15s %s", web_state_name(wi.state), APP_WIFI_STA_SSID);
+    printf("WIFI  %-15s %s", web_state_name(wi.state), web_ssid());
     if (wi.state == WEB_WIFI_UP) {
         printf("  http://%u.%u.%u.%u/  %ld dBm", ip[0], ip[1], ip[2], ip[3], (long)wi.rssi_dbm);
+    } else if (wi.state == WEB_WIFI_AP) {
+        printf("  http://%u.%u.%u.%u/  clients %lu", ip[0], ip[1], ip[2], ip[3],
+               (unsigned long)wi.ap_clients);
     } else if (wi.state == WEB_WIFI_WAIT_RETRY) {
         printf("  retry in %lu s", (unsigned long)wi.retry_in_s);
     }
@@ -348,9 +351,11 @@ static void publish_status_json(uint64_t now, uint32_t baro_hz)
     snprintf(ip, sizeof ip, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
     jw_obj(&w, "wifi");
     jw_str(&w, "state", web_state_name(wi.state));
-    jw_str(&w, "ssid", APP_WIFI_STA_SSID);
+    jw_str(&w, "ssid", web_ssid());
     jw_str(&w, "ip", ip);
-    if (wi.state == WEB_WIFI_UP) {
+    if (wi.state == WEB_WIFI_AP) {
+        jw_int(&w, "ap_clients", wi.ap_clients);
+    } else if (wi.state == WEB_WIFI_UP) {
         jw_int(&w, "rssi_dbm", wi.rssi_dbm);
     } else {
         jw_null(&w, "rssi_dbm");
@@ -513,7 +518,11 @@ int main(void)
      * a few hundred ms, longer than the IMU ring holds. The join itself runs
      * in the background from web_poll(). */
     const web_config_t web_cfg = {
-        .ssid = APP_WIFI_STA_SSID, .password = APP_WIFI_STA_PASSWORD, .hostname = APP_WEB_HOSTNAME,
+        .mode = APP_WIFI_MODE == APP_WIFI_AP  ? WEB_NET_AP :
+                APP_WIFI_MODE == APP_WIFI_STA ? WEB_NET_STA : WEB_NET_AUTO,
+        .ssid = APP_WIFI_STA_SSID, .password = APP_WIFI_STA_PASSWORD,
+        .ap_ssid = APP_WIFI_AP_SSID, .ap_fallback_s = APP_WIFI_AP_FALLBACK_S,
+        .hostname = APP_WEB_HOSTNAME,
     };
     uint64_t t_web = time_us_64();
     bool web_ok = web_init(&web_cfg);

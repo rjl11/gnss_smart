@@ -35,7 +35,7 @@ cmake -S firmware -B firmware/build -G Ninja
 ninja -C firmware/build
 ```
 
-The output is `firmware/build/app.uf2` (and `app.elf` for SWD). The GNSS antenna mode defaults to single; add `-DGNSS_ANTENNA_MODE=dual` to the cmake line for a UM982 with two antennas. The web server is on by default (`-DWEB_MODE=always`, joins `-DWIFI_STA_SSID=TeliaGateway`, open unless `-DWIFI_STA_PASSWORD` is set); `-DWEB_MODE=off` builds without Wi-Fi. Its code is in `firmware/app/web/` with `firmware/app/lwipopts.h`. On miniPi, follow the rules under "Build host" below.
+The output is `firmware/build/app.uf2` (and `app.elf` for SWD). The GNSS antenna mode defaults to single; add `-DGNSS_ANTENNA_MODE=dual` to the cmake line for a UM982 with two antennas. The web server is on by default (`-DWEB_MODE=always`, joins `-DWIFI_STA_SSID=TeliaGateway`, open unless `-DWIFI_STA_PASSWORD` is set); `-DWEB_MODE=off` builds without Wi-Fi. `-DWIFI_MODE=auto` (default) falls back to the open AP `gnss_smart` (192.168.4.1) when the station hasn't joined within 30 s of boot and stays there until reboot; `sta` never starts the AP, `ap` runs it from boot. Its code is in `firmware/app/web/` with `firmware/app/lwipopts.h`; the AP's DHCP/DNS servers are vendored in `firmware/drivers/ap_servers/`. On miniPi, follow the rules under "Build host" below.
 
 ## Drivers
 

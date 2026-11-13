@@ -10,12 +10,16 @@
 #include "lwip/apps/mdns.h"
 #include "lwip/netif.h"
 
+#include "dhcpserver.h"
+#include "dnsserver.h"
+
 #define POLL_PERIOD_US      50000u
 #define JOIN_TIMEOUT_US     30000000u  /* association plus DHCP */
 #define RETRY_FIRST_US      5000000u
 #define RETRY_MAX_US        30000000u
 #define RSSI_PERIOD_US      2000000u
 #define LED_BLINK_US        500000u
+#define LED_BLINK_AP_US     125000u
 
 #define JSON_MAX            2048
 #define JSON_SLOTS          3          /* concurrent /status.json transfers */
@@ -27,6 +31,9 @@ static web_info_t s_info;
 static uint64_t s_next_poll, s_join_t0, s_retry_at, s_next_rssi, s_next_led;
 static uint32_t s_backoff_us = RETRY_FIRST_US;
 static bool s_led;
+static uint64_t s_ap_deadline;     /* AUTO: start the AP if not joined by then */
+static dhcp_server_t s_dhcp;
+static dns_server_t s_dns;
 
 /* /status.json: the main loop writes s_json under the lwIP lock; each request
  * gets its own copy, so a transfer in progress never sees a half-new text. */
@@ -37,6 +44,7 @@ static bool s_slot_used[JSON_SLOTS];
 static volatile uint32_t s_http_busy;
 
 static struct netif *sta_netif(void) { return &cyw43_state.netif[CYW43_ITF_STA]; }
+static struct netif *ap_netif(void) { return &cyw43_state.netif[CYW43_ITF_AP]; }
 
 /* ---- httpd custom file (lwIP context) ----------------------------------- */
 
@@ -119,6 +127,33 @@ static const char *link_name(int st)
     }
 }
 
+/* Open AP at 192.168.4.1 with DHCP, catch-all DNS and mDNS. Once it runs it
+ * stays until reboot, so no station join moves its channel under connected
+ * phones (plans/web-config-server.md, "Open access point"). */
+static void start_ap(uint64_t now, const char *why)
+{
+    (void)now;
+    if (s_info.state != WEB_WIFI_OFF) {
+        cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+        cyw43_arch_disable_sta_mode();
+    }
+    cyw43_arch_enable_ap_mode(s_cfg.ap_ssid, NULL, CYW43_AUTH_OPEN);
+
+    ip_addr_t ip, mask;
+    ip_addr_set_ip4_u32(&ip, PP_HTONL(CYW43_DEFAULT_IP_AP_ADDRESS));
+    ip_addr_set_ip4_u32(&mask, PP_HTONL(CYW43_DEFAULT_IP_MASK));
+    cyw43_arch_lwip_begin();
+    dhcp_server_init(&s_dhcp, ap_netif(), &ip, &mask);
+    dns_server_init(&s_dns, ap_netif(), &ip);
+    mdns_resp_add_netif(ap_netif(), s_cfg.hostname);
+    mdns_resp_add_service(ap_netif(), s_cfg.hostname, "_http", DNSSD_PROTO_TCP, 80, mdns_txt, NULL);
+    cyw43_arch_lwip_end();
+
+    s_info.state = WEB_WIFI_AP;
+    s_info.ip = ip_addr_get_ip4_u32(&ip);
+    printf("[web] %s: open AP \"%s\", http://192.168.4.1/ until reboot\n", why, s_cfg.ap_ssid);
+}
+
 bool web_init(const web_config_t *cfg)
 {
     s_cfg = *cfg;
@@ -126,19 +161,29 @@ bool web_init(const web_config_t *cfg)
         printf("[web] CYW43439 init failed, running without Wi-Fi\n");
         return false;
     }
-    cyw43_arch_enable_sta_mode();
 
     cyw43_arch_lwip_begin();
-    netif_set_hostname(sta_netif(), s_cfg.hostname);
     httpd_init();
     mdns_resp_init();
+    cyw43_arch_lwip_end();
+    web_set_status_json("{}", 2);
+    s_started = true;
+
+    uint64_t now = time_us_64();
+    if (s_cfg.mode == WEB_NET_AP) {
+        start_ap(now, "AP mode set at build time");
+        return true;
+    }
+
+    cyw43_arch_enable_sta_mode();
+    cyw43_arch_lwip_begin();
+    netif_set_hostname(sta_netif(), s_cfg.hostname);
     mdns_resp_add_netif(sta_netif(), s_cfg.hostname);
     mdns_resp_add_service(sta_netif(), s_cfg.hostname, "_http", DNSSD_PROTO_TCP, 80, mdns_txt, NULL);
     cyw43_arch_lwip_end();
 
-    web_set_status_json("{}", 2);
-    s_started = true;
-    start_join(time_us_64());
+    s_ap_deadline = now + (uint64_t)s_cfg.ap_fallback_s * 1000000u;
+    start_join(now);
     return true;
 }
 
@@ -156,6 +201,30 @@ void web_poll(uint64_t now)
         return;
     }
     s_next_poll = now + POLL_PERIOD_US;
+
+    if (s_info.state == WEB_WIFI_AP) {
+        if (now >= s_next_rssi) { /* reuse the 2 s timer for the client count */
+            /* With macs == NULL the driver returns the maximum, not the
+             * count, so it needs a buffer. */
+            static uint8_t macs[10 * 6];
+            int n = (int)(sizeof macs / 6);
+            cyw43_wifi_ap_get_stas(&cyw43_state, &n, macs);
+            s_info.ap_clients = (uint32_t)n;
+            s_next_rssi = now + RSSI_PERIOD_US;
+        }
+        if (now >= s_next_led) { /* fast blink */
+            led_set(!s_led);
+            s_next_led = now + LED_BLINK_AP_US;
+        }
+        return;
+    }
+
+    /* AUTO: no station link since boot within the fallback time. A link that
+     * came up once and dropped later keeps retrying the station. */
+    if (s_cfg.mode == WEB_NET_AUTO && s_info.joins == 0 && now >= s_ap_deadline) {
+        start_ap(now, "no station link");
+        return;
+    }
 
     int st = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
     s_info.link_status = st;
@@ -241,6 +310,12 @@ const char *web_state_name(web_wifi_state_t s)
     case WEB_WIFI_JOINING:    return "joining";
     case WEB_WIFI_UP:         return "up";
     case WEB_WIFI_WAIT_RETRY: return "retry";
+    case WEB_WIFI_AP:         return "ap";
     default:                  return "?";
     }
+}
+
+const char *web_ssid(void)
+{
+    return s_info.state == WEB_WIFI_AP ? s_cfg.ap_ssid : s_cfg.ssid;
 }

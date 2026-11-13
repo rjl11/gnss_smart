@@ -81,6 +81,19 @@
 #ifndef APP_WIFI_STA_PASSWORD
 #define APP_WIFI_STA_PASSWORD       ""
 #endif
+/* Network mode (cmake -DWIFI_MODE=auto|sta|ap). auto: join the station
+ * network; if that hasn't worked within APP_WIFI_AP_FALLBACK_S of boot, run
+ * the open AP instead until the next reboot. sta: station only. ap: open AP
+ * from boot. The AP is open (no password) by decision, at 192.168.4.1. */
+#define APP_WIFI_AUTO               0
+#define APP_WIFI_STA                1
+#define APP_WIFI_AP                 2
+#ifndef APP_WIFI_MODE
+#define APP_WIFI_MODE               APP_WIFI_AUTO
+#endif
+#define APP_WIFI_AP_SSID            "gnss_smart"
+#define APP_WIFI_AP_FALLBACK_S      30
+
 /* DHCP and mDNS name: http://gnss-smart.local/ where mDNS resolves. */
 #define APP_WEB_HOSTNAME            "gnss-smart"
 

@@ -54,10 +54,26 @@ set(WEB_MODE always CACHE STRING "Web server: always or off")
 set_property(CACHE WEB_MODE PROPERTY STRINGS always off)
 set(WIFI_STA_SSID "TeliaGateway" CACHE STRING "Wi-Fi network to join")
 set(WIFI_STA_PASSWORD "" CACHE STRING "Wi-Fi password; empty for an open network")
+# auto: station, open AP gnss_smart if not joined within 30 s of boot.
+# sta: station only. ap: open AP from boot.
+set(WIFI_MODE auto CACHE STRING "Wi-Fi network mode: auto, sta or ap")
+set_property(CACHE WIFI_MODE PROPERTY STRINGS auto sta ap)
+if(WIFI_MODE STREQUAL "auto")
+    set(APP_WIFI_MODE_VALUE 0)
+elseif(WIFI_MODE STREQUAL "sta")
+    set(APP_WIFI_MODE_VALUE 1)
+elseif(WIFI_MODE STREQUAL "ap")
+    set(APP_WIFI_MODE_VALUE 2)
+else()
+    message(FATAL_ERROR "WIFI_MODE must be auto, sta or ap, not '${WIFI_MODE}'")
+endif()
 if(WEB_MODE STREQUAL "always")
+    add_subdirectory(drivers/ap_servers)
     target_sources(app PRIVATE app/web/web.c app/web/jsonw.c)
+    target_link_libraries(app PRIVATE ap_servers)
     target_compile_definitions(app PRIVATE
         APP_WEB_MODE=1
+        APP_WIFI_MODE=${APP_WIFI_MODE_VALUE}
         "APP_WIFI_STA_SSID=\"${WIFI_STA_SSID}\""
         "APP_WIFI_STA_PASSWORD=\"${WIFI_STA_PASSWORD}\""
         "CYW43_HOST_NAME=\"gnss-smart\""

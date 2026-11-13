@@ -14,9 +14,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum {
+    WEB_NET_AUTO = 0,     /* station; open AP if not joined within ap_fallback_s of boot */
+    WEB_NET_STA,          /* station only, retry forever */
+    WEB_NET_AP,           /* open AP only, from boot */
+} web_net_mode_t;
+
 typedef struct {
-    const char *ssid;
+    web_net_mode_t mode;
+    const char *ssid;     /* station network */
     const char *password; /* NULL or "" = open network */
+    const char *ap_ssid;  /* open access point, 192.168.4.1 */
+    uint32_t ap_fallback_s;
     const char *hostname; /* DHCP and mDNS name */
 } web_config_t;
 
@@ -25,13 +34,15 @@ typedef enum {
     WEB_WIFI_JOINING,     /* associating or waiting for DHCP */
     WEB_WIFI_UP,          /* associated with an IP address */
     WEB_WIFI_WAIT_RETRY,  /* failed or link lost; next try at a backoff */
+    WEB_WIFI_AP,          /* open access point; stays until reboot */
 } web_wifi_state_t;
 
 typedef struct {
     web_wifi_state_t state;
     int link_status;      /* last cyw43_tcpip_link_status() */
-    uint32_t ip;          /* network byte order, 0 if none */
+    uint32_t ip;          /* network byte order, 0 if none (AP: 192.168.4.1) */
     int32_t rssi_dbm;     /* valid when state is UP */
+    uint32_t ap_clients;  /* AP: stations associated now */
     uint32_t joins;       /* times the link came up */
     uint32_t drops;       /* times it went down or a join failed */
     uint32_t retry_in_s;  /* WAIT_RETRY only */
@@ -44,7 +55,11 @@ typedef struct {
  * the rest of the firmware runs on without Wi-Fi. */
 bool web_init(const web_config_t *cfg);
 
-/* Join / retry state machine and the LED. Call from the main loop. */
+/* The SSID in use: the station network, or the AP once it runs. */
+const char *web_ssid(void);
+
+/* Join / retry state machine, AP fallback and the LED. Call from the main
+ * loop. */
 void web_poll(uint64_t now_us);
 
 /* The text /status.json serves until the next call. Copied. */
