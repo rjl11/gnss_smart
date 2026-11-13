@@ -316,7 +316,7 @@ Not done yet:
    - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value. On the UM980 (already warm) it read about 60 000 and rose from 59.9 to 61.1 over 10 min (bench results 2026-11-12, UM980 gap capture), which fits °C × 1000. A one-shot `HWSTATUSA COM3` on 2026-11-13, with only its five 1 Hz NMEA logs running, read 56 204 (about 56.2 °C; supplies 0.908, 1.014, 1.805 V). The cold-start reading and the thermometer check are still open.
    - The UNIHEADING position-type values that mean a fixed heading, and the heading latency against BESTNAV in the same epoch.
    - FIXLENGTH, VARIABLELENGTH and TRACTOR against each other on the rigid bar (heading σ, time to fixed heading, behaviour when ANT2 is shadowed), and what `CONFIG` shows after TRACTOR then VARIABLELENGTH are sent (the AgOpenGPS file sends both).
-   - Whether each receiver outputs `SPOOFINFOB` (listed for the UM982 only) and `PPSSTATUSB`, and what PPSSTATUS reports before the fix, at RTK fixed and in the 30 s after the antenna is disconnected. The UM980 outputs PPSSTATUSB and reads status 3 with a single fix (bench results 2026-11-13, UM980 PPSSTATUS); before the fix, the holdover, RTK fixed and the UM982 are still open. The UM980 also outputs SPOOFINFOB, all zeros indoors with ANTISPOOF off or on (bench results 2026-11-13, UM980 SPOOFINFO); the UM982 is still open.
+   - Whether each receiver outputs `SPOOFINFOB` (listed for the UM982 only) and `PPSSTATUSB`, and what PPSSTATUS reports before the fix, at RTK fixed and in the 30 s after the antenna is disconnected. The UM980 outputs PPSSTATUSB and reads status 3 with a single fix (bench results 2026-11-13, UM980 PPSSTATUS); before the fix, the holdover, RTK fixed and the UM982 are still open. The UM980 also outputs SPOOFINFOB; indoors with ANTISPOOF off or on the spoofing flag and every mask stayed 0, with position type SINGLE (bench results 2026-11-13, UM980 SPOOFINFO); the UM982 is still open.
    - What Identify should do with a module built on a UM980C / UM982C / UM982A (VERSION types 64, 65, 94), if one turns up.
    - The 5 V current of each module at 20 Hz (the UM982 datasheet's 600 mW is for 10 Hz), and the module's COM1 and PPS logic level (3.3 V expected).
 
@@ -566,19 +566,19 @@ Same UM980 (R4.10Build25621, SG 2) on miniPi over COM3 at 115200, antenna indoor
 |---|---|---|
 | `CONFIG` | 21 lines, `ANTIJAM AUTO`, no ANTISPOOF line | 22 lines: `$CONFIG,ANTISPOOF,CONFIG ANTISPOOF ENABLE 1` added |
 | SPOOFINFOB | 60 frames, 0 CRC errors, body 136 bytes (Table 7-163) | the same |
-| Contents | position type 16 (`SINGLE`), monitor 0, every mask 0, every frame | the same |
+| Contents | spoofing flag 0, position type 16 (`SINGLE`), every mask 0, every frame | the same |
 | BESTNAVB | `SOL_COMPUTED` / `SINGLE` in every epoch | the same |
 
 - **The UM980 outputs SPOOFINFO**, although §7.5.93 lists only the UM982, and it does so with anti-spoofing off as well as on.
 - **The second field is the position type**, as the manual's example shows (`SINGLE` in ASCII, 16 in binary), not the number of tracked satellites the table describes.
 - **`CONFIG` lists the setting as `ANTISPOOF ENABLE 1`**, with a trailing parameter the manual doesn't document. The fast-path check would have to match that form if the setting is ever added to the target table.
-- **Not tested:** whether the receiver flags anything. Nothing was flagged in either run, which is expected indoors with no spoofer. With all zeros in both runs, the frames don't show whether detection works with ANTISPOOF off.
+- **Not tested:** whether the receiver flags anything. Nothing was flagged in either run, which is expected indoors with no spoofer. With the flag and every mask at 0 in both runs, the frames don't show whether detection works with ANTISPOOF off or on; that needs an outdoor test or a spoofer.
 - Script: `~/pico/spoofinfo.py` on miniPi, output in `~/pico/spoofinfo.log`.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
 - **Reply formats** the fast-path text match has to handle:
-  - `CONFIG`: the `$command,…,response: OK` line, then one `$CONFIG,…` line per setting. The `$CONFIG,COM3,…` line is usually the last. The code ends the reply after it, or after 300 ms of silence.
+  - `CONFIG`: the `$command,…,response: OK` line, then one `$CONFIG,…` line per setting. The `$CONFIG,COM3,…` line is usually the last. The code ends the reply after it, or after 300 ms of silence. Some settings carry a trailing parameter the manual doesn't document: on our UM980 `CONFIG ANTISPOOF ENABLE` reads back as `$CONFIG,ANTISPOOF,CONFIG ANTISPOOF ENABLE 1` (our bench, 2026-11-13, UM980 SPOOFINFO), so match the setting as a prefix, not the whole line.
   - `MODE`: one `#MODE,…;…*` line.
   - `UNILOGLIST`: lines that start with `<`. The first is the count (for example `<   3`), followed by that many log lines.
 - **Timeouts:** 5 s per command and 10 s for `SAVECONFIG`. Ours were 1 s for everything.
