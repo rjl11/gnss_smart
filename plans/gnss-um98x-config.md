@@ -135,7 +135,7 @@ Read 2026-11-13. None of these items changes the target configuration; they are 
   - The log is `SPOOFINFO` (msg ID 530, §7.5.93, Table 7-163), 1 Hz, listed for the UM982 only. Fields: a spoofing flag (0/1); SpoofNoticeMask (bit 0 position anomaly, bit 1 time, bit 2 tracked satellites, bit 3 signal source); TimeNoticeMask (GPS/BDS/GAL/GLO time reset bits); the affected signals as a bit mask (Table 7-164); and one 64-bit satellite mask per constellation. The second field is named "Pos type" but described as the number of tracked satellites; the manual's example has `NARROW_INT` there, so read it as a position type.
   - Whether the UM980 (build 25621, whose notes mention "anti-spoofing detection with warning messages") outputs SPOOFINFO is a bench check.
 - **PVT reliability:** `CONFIG PVT RELIABILITY <horizontal> <vertical> <doppler velocity>` (§4.36, Table 4-46). Each is 1 normal (default), 2 strict or 3 very strict. It applies to the single-point solution only, on the UM982 from build 17746 (ours is 18975). Not sent; a candidate if bad standalone epochs reach the filter.
-- **PPSSTATUS** (msg ID 9000, §7.5.82, Table 7-152): 1 Hz, UM980 and UM982. Fields: status (0 no pulse, 1 pulse without guaranteed accuracy, 2 about 100–1000 ns, 3 better than 100 ns), the PPS GPS week and ms, the pulse phase error in ns, the offset to the observation time, and the PPS configuration. A candidate for gating the PPS time anchor and for the diagnostics page; not in the log set yet (about 24 + 60 + 4 B/s if added).
+- **PPSSTATUS** (msg ID 9000, §7.5.82, Table 7-152): 1 Hz, UM980 and UM982. Fields: status (0 no pulse, 1 pulse without guaranteed accuracy, 2 about 100–1000 ns, 3 better than 100 ns), the PPS GPS week and ms, the pulse phase error in ns, the offset to the observation time, and the PPS configuration. A candidate for gating the PPS time anchor and for the diagnostics page; not in the log set yet (about 24 + 60 + 4 B/s if added). The UM980 outputs it (bench results 2026-11-13, UM980 PPSSTATUS).
 - **PPS keeps running after the fix is lost:** with `ENABLE`, PPS starts after the position is fixed and PPS has converged, and it continues for about 30 s after positioning stops (§4.32, Table 4-41). A PPS edge alone therefore doesn't prove a current fix; the parser still needs BESTNAVB's solution status. The manual lists `ENABLE` as the default, yet the UM982 shipped with `PPS DISABLE`. Valid periods are 50, 100, 200 … 20000 ms; UserDelay is ±100 000 000 ns.
 - **`UNLOG <port>`** with no message stops every log on that port (§8.4). `UNLOGALL` isn't in the manual, so our `UNLOG COMx` is the documented form.
 - **`RESET CONFIG`** (§8.2) clears the configuration except the serial ports, SIGNALGROUP, the log list and standby. Not used: provisioning starts from `FRESET`.
@@ -316,7 +316,7 @@ Not done yet:
    - Whether HWSTATUS field 2 really is the temperature in thousandths of a °C. Read it right after a cold power-on and again after 30 min of running; it should rise. Compare it with a thermometer on the module shield. Check the UM980 as well as the UM982. On the UM982 a read-only first check can be done now with the module on the PC: send `HWSTATUSA COM3` once and look for a plausible value. On the UM980 (already warm) it read about 60 000 and rose from 59.9 to 61.1 over 10 min (bench results 2026-11-12, UM980 gap capture), which fits °C × 1000. A one-shot `HWSTATUSA COM3` on 2026-11-13, with only its five 1 Hz NMEA logs running, read 56 204 (about 56.2 °C; supplies 0.908, 1.014, 1.805 V). The cold-start reading and the thermometer check are still open.
    - The UNIHEADING position-type values that mean a fixed heading, and the heading latency against BESTNAV in the same epoch.
    - FIXLENGTH, VARIABLELENGTH and TRACTOR against each other on the rigid bar (heading σ, time to fixed heading, behaviour when ANT2 is shadowed), and what `CONFIG` shows after TRACTOR then VARIABLELENGTH are sent (the AgOpenGPS file sends both).
-   - Whether each receiver outputs `SPOOFINFOB` (listed for the UM982 only) and `PPSSTATUSB`, and what PPSSTATUS reports before the fix, at RTK fixed and in the 30 s after the antenna is disconnected.
+   - Whether each receiver outputs `SPOOFINFOB` (listed for the UM982 only) and `PPSSTATUSB`, and what PPSSTATUS reports before the fix, at RTK fixed and in the 30 s after the antenna is disconnected. The UM980 outputs PPSSTATUSB and reads status 3 with a single fix (bench results 2026-11-13, UM980 PPSSTATUS); before the fix, the holdover, RTK fixed and the UM982 are still open.
    - What Identify should do with a module built on a UM980C / UM982C / UM982A (VERSION types 64, 65, 94), if one turns up.
    - The 5 V current of each module at 20 Hz (the UM982 datasheet's 600 mW is for 10 Hz), and the module's COM1 and PPS logic level (3.3 V expected).
 
@@ -539,6 +539,25 @@ The five NMEA logs and every other line were unchanged at each step.
 - **Saved items stay listed** after `RESET` and a power cycle, so the fast-path check sees on every boot what provisioning set.
 - **`SAVECONFIG` answers in about 250 ms** on the UM980 (one measurement, 115200, nothing else queued). The firmware's 10 s wait leaves plenty of margin.
 - **The module's saved state now differs from the [as-received config](../docs/receiver-configs/um980-as-received-2026-11-12.md)** by these two lines. Both are target values. `PVTALG MULTI` is a real change: the UM980 default is AUTO (§4.35). To go back exactly, `FRESET` and the restore commands in that file.
+
+## Bench results (2026-11-13, UM980 PPSSTATUS)
+Same UM980 (R4.10Build25621, SG 2) on miniPi over COM3 at 115200, antenna indoors. Its saved PPS setting was already on (`CONFIG PPS ENABLE GPS POSITIVE 500000 1000 0 0`, from the [as-received config](../docs/receiver-configs/um980-as-received-2026-11-12.md)), so nothing was configured. The script sent `UNLOG COM3` (not saved), one `PPSSTATUSA COM3`, then `PPSSTATUSB COM3 1` and `BESTNAVB COM3 1`, recorded 120 s, and sent `RESET`. Afterwards `UNILOGLIST` showed the five saved NMEA logs again.
+
+| Item | Result |
+|---|---|
+| Accepted | `PPSSTATUSA COM3` and `PPSSTATUSB COM3 1`, both `response: OK`. The UM980 outputs it, as §7.5.82 lists |
+| Frames | 120 PPSSTATUSB and 120 BESTNAVB, 0 CRC errors. Binary body 60 bytes, matching Table 7-152 |
+| Status | **3 (better than 100 ns) in all 120 s** |
+| Pulse phase error | −6 to +6 ns, mean −0.6 ns |
+| PPS time | week 2444 and ms on the whole second, 1 s before the frame's header time (the frame reports the previous pulse) |
+| offsetTime | 6 284 266 to 6 308 933 (× 0.01 ns, so about 62.8–63.1 µs), drifting by about 0.25 µs over 2 min |
+| ConfigInfo | `0x03E80020`: interval 1000 ms (bits 31:16), Enable1 (bit 3 = 0), rising edge (bit 4 = 0), GnssRef 1 (bits 7:5) |
+| TimeEstErr | −7 to +7 |
+| Solution | BESTNAVB `SOL_COMPUTED` / `SINGLE` (type 16) in every epoch, no RTCM |
+
+- **PPSSTATUS works on the UM980** and reads status 3 with a single fix indoors, so status 3 doesn't need RTK.
+- **Still open:** what it reports before the first fix and in the 30 s after the antenna is pulled (the holdover), and the same check on the UM982. Both need someone at the bench to plug and unplug the antenna.
+- Script: `~/pico/ppsstatus.py` on miniPi (the `sgtest2.py` helpers, `termios`), output in `~/pico/ppsstatus.log`.
 
 ## Reference: UM98x replies and timings
 From the AgOpenWeb-HAT daemon (https://github.com/chriskinal/AgOpenWeb-HAT, `core/src/um98x.cpp` and `core/include/aow/um98x.h`, commit `e4bd9ef`, read 2026-11-10; ported from the AiO New Dawn firmware, GPL v3). It reads and writes UM981/UM982 settings on real receivers. These are facts from its code, to confirm on our module; no code is taken.
