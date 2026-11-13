@@ -105,7 +105,7 @@ static bool baro_start(void)
         printf("[bmp581] init failed: %s (%d), retrying\n", bmp581_strerror(rc), rc);
         return false;
     }
-    printf("[bmp581] running\n");
+    printf("[bmp581] running at 0x%02x\n", s_baro.cfg.addr);
     return true;
 }
 

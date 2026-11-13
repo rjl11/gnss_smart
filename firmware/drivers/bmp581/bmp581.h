@@ -42,7 +42,9 @@ typedef struct {
     int         sda_pin;    /* GPIO, or -1 if the bus is set up elsewhere    */
     int         scl_pin;    /* GPIO, or -1 if the bus is set up elsewhere    */
     uint32_t    baud_hz;    /* I2C clock; used only when sda/scl are set     */
-    uint8_t     addr;       /* BMP5_I2C_ADDR_PRIM (0x46, SDO=GND) or _SEC (0x47) */
+    uint8_t     addr;       /* BMP5_I2C_ADDR_PRIM (0x46, SDO=GND), _SEC (0x47),
+                             * or 0 to probe 0x46 then 0x47 (init stores the
+                             * address that answered in b->cfg.addr) */
     int         int_pin;    /* GPIO wired to the BMP581 INT pin, or -1 to poll */
 
     uint8_t     odr;        /* BMP5_ODR_*                                    */
@@ -81,7 +83,7 @@ typedef struct {
     volatile uint32_t drdy_missed;
 } bmp581_t;
 
-/* Fills in defaults: i2c1 on GP2/GP3 at 400 kHz, address 0x46, no INT pin,
+/* Fills in defaults: i2c1 on GP2/GP3 at 400 kHz, address probed (0), no INT pin,
  * 100.2 Hz, OSR_P 8x, OSR_T 1x, IIR bypassed, 1 ms poll interval. */
 void bmp581_default_config(bmp581_config_t *cfg);
 

@@ -148,7 +148,7 @@ void bmp581_default_config(bmp581_config_t *cfg)
     cfg->sda_pin = 2;            /* GP2 = I2C1 SDA */
     cfg->scl_pin = 3;            /* GP3 = I2C1 SCL */
     cfg->baud_hz = 400000;
-    cfg->addr = BMP5_I2C_ADDR_PRIM;
+    cfg->addr = 0; /* probe: breakouts differ (Adafruit-style boards strap SDO high = 0x47) */
     cfg->int_pin = -1;
 
     /* 100 Hz for INSLIB's baro_alt filter. OSR_P 8x / OSR_T 1x fits 100 Hz
@@ -211,7 +211,7 @@ int bmp581_init(bmp581_t *b, const bmp581_config_t *cfg)
     int rslt;
 
     if (b == NULL || cfg == NULL || cfg->i2c == NULL ||
-        (cfg->addr != BMP5_I2C_ADDR_PRIM && cfg->addr != BMP5_I2C_ADDR_SEC) ||
+        (cfg->addr != 0 && cfg->addr != BMP5_I2C_ADDR_PRIM && cfg->addr != BMP5_I2C_ADDR_SEC) ||
         ((cfg->sda_pin < 0) != (cfg->scl_pin < 0))) {
         return BMP581_E_BAD_CONFIG;
     }
@@ -236,6 +236,22 @@ int bmp581_init(bmp581_t *b, const bmp581_config_t *cfg)
     b->dev.delay_us = bmp581_delay_us;
 
     sleep_ms(2); /* t_startup after power-up */
+
+    if (b->cfg.addr == 0) {
+        /* Probe both straps with a CHIP_ID read; bmp5_init checks the ID. */
+        static const uint8_t addrs[] = { BMP5_I2C_ADDR_PRIM, BMP5_I2C_ADDR_SEC };
+        uint8_t id;
+        for (unsigned i = 0; i < sizeof(addrs) && b->cfg.addr == 0; i++) {
+            b->cfg.addr = addrs[i];
+            if (bmp581_i2c_read(BMP5_REG_CHIP_ID, &id, 1, b) != BMP5_INTF_RET_SUCCESS) {
+                b->cfg.addr = 0;
+            }
+        }
+        b->stats.i2c_errors = 0; /* a NACK on the absent address is not an error */
+        if (b->cfg.addr == 0) {
+            return BMP5_E_DEV_NOT_FOUND;
+        }
+    }
 
     rslt = bmp5_soft_reset(&b->dev);
     if (rslt != BMP5_OK) return rslt;
