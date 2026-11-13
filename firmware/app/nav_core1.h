@@ -84,9 +84,25 @@ typedef struct {
     uint32_t n_reinit;     /* filter (re)initialisations                    */
 } nav_output_t;
 
+/* Filter settings from the web config page (settings.h). */
+typedef struct {
+    float leverarm_m[3];         /* GNSS antenna from the IMU, body FRD */
+    float acc_psd;               /* (m/s^2)^2/Hz */
+    float gyr_psd;               /* (rad/s)^2/Hz */
+    float gyr_bias_rw;           /* rad/s/sqrt(s) */
+    float acc_bias_rw;           /* m/s^2/sqrt(s) */
+    float automotive_min_speed;  /* m/s, 0 = INSLIB default */
+} nav_params_t;
+
 /* Creates the queues and starts core 1. The filter starts at once with the
- * antenna-mode setting, which sets automotive_mode. */
-void nav_start(nav_antenna_t mode);
+ * antenna-mode setting, which sets automotive_mode. Core 1 also registers
+ * for flash lockout, so settings_save() can pause it. */
+void nav_start(nav_antenna_t mode, const nav_params_t *params);
+
+/* New filter settings: core 1 picks them up before its next sample and
+ * re-initialises the filter (re-align, then navigate). Output pauses until
+ * then; n_reinit counts it. */
+void nav_set_params(const nav_params_t *params);
 
 /* Each returns false if the queue was full and the sample was dropped. */
 bool nav_push_imu(const nav_imu_t *s);

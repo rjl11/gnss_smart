@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "pico/critical_section.h"
+#include "pico/flash.h"
 #include "pico/multicore.h"
 #include "pico/time.h"
 #include "pico/util/queue.h"
@@ -27,11 +28,14 @@ static critical_section_t s_out_lock;
 static nav_output_t s_out;                 /* guarded by s_out_lock */
 static volatile nav_antenna_t s_mode;
 static volatile uint32_t s_drops;
+static nav_params_t s_params_new;          /* guarded by s_out_lock */
+static volatile uint32_t s_params_seq;     /* bumped by core 0 on a change */
 
 /* AAPCS wants the stack pointer on an 8-byte boundary. */
 static uint32_t s_stack[APP_CORE1_STACK_BYTES / sizeof(uint32_t)] __attribute__((aligned(8)));
 
 /* Core 1 only. */
+static nav_params_t s_p;                   /* settings the filter runs with */
 static nav_suite_t s_suite;
 static nav_output_t s_work;
 static uint64_t s_update_us_sum;
@@ -71,14 +75,14 @@ static void filter_init(nav_antenna_t mode)
 
     /* Position stays zero: auto-init replaces it with the first good fix. */
     init.time = (ins_time_us_t)time_us_64();
-    init.gyr_bias_pred_stddev_rps_sqrts = APP_GYR_BIAS_RW;
-    init.acc_bias_pred_stddev_mps2_sqrts = APP_ACC_BIAS_RW;
+    init.gyr_bias_pred_stddev_rps_sqrts = s_p.gyr_bias_rw;
+    init.acc_bias_pred_stddev_mps2_sqrts = s_p.acc_bias_rw;
 
     opt.auto_init = true;
     /* Course yaw only with one antenna. In dual mode it adds nothing and
      * pulls the wrong way when reversing (plans/gnss-um98x-config.md). */
     opt.automotive_mode = mode != NAV_ANT_DUAL;
-    opt.automotive_min_speed_mps = APP_AUTOMOTIVE_MIN_SPEED;
+    opt.automotive_min_speed_mps = s_p.automotive_min_speed;
 
     nav_suite_init(&s_suite, &init, &opt);
     s_mag_model_set = false;
@@ -130,9 +134,9 @@ static void attach_gnss(ins_measurements_t *m, const nav_gnss_t *g)
                  g->vel_sd_ned[1] * g->vel_sd_ned[1], g->vel_sd_ned[2] * g->vel_sd_ned[2]);
         m->gnss_vel.is_valid = true;
     }
-    m->gnss_leverarm_b[0] = APP_GNSS_LEVERARM_X_M;
-    m->gnss_leverarm_b[1] = APP_GNSS_LEVERARM_Y_M;
-    m->gnss_leverarm_b[2] = APP_GNSS_LEVERARM_Z_M;
+    m->gnss_leverarm_b[0] = s_p.leverarm_m[0];
+    m->gnss_leverarm_b[1] = s_p.leverarm_m[1];
+    m->gnss_leverarm_b[2] = s_p.leverarm_m[2];
     m->gps_week = g->week;
     m->gps_itow_ms = (int)g->tow_ms;
     m->gnss_delay_ms = (int)(age_us / 1000);
@@ -179,16 +183,30 @@ static void core1_main(void)
     ins_measurements_t m;
 
     log_set_sink(log_sink);
+    /* Lets core 0 pause this core while it writes the settings to flash. */
+    flash_safe_execute_core_init();
 
     /* The antenna mode is a setting known at boot, so the filter starts at
-     * once. It restarts only if the receiver can't do that mode. */
+     * once. It restarts if the receiver can't do that mode, or when the
+     * settings change. */
+    uint32_t params_seq = s_params_seq;
+    critical_section_enter_blocking(&s_out_lock);
+    s_p = s_params_new;
+    critical_section_exit(&s_out_lock);
     nav_antenna_t mode = s_mode;
     filter_init(mode);
     uint64_t next_publish = time_us_64() + PUBLISH_PERIOD_US;
 
     for (;;) {
         nav_antenna_t new_mode = s_mode;
-        if (new_mode != mode) {
+        uint32_t new_seq = s_params_seq;
+        if (new_mode != mode || new_seq != params_seq) {
+            if (new_seq != params_seq) {
+                params_seq = new_seq;
+                critical_section_enter_blocking(&s_out_lock);
+                s_p = s_params_new;
+                critical_section_exit(&s_out_lock);
+            }
             mode = new_mode;
             filter_init(mode);
         }
@@ -200,8 +218,8 @@ static void core1_main(void)
             memcpy(m.acc.data, imu.acc, sizeof m.acc.data);
             memcpy(m.gyr.data, imu.gyr, sizeof m.gyr.data);
             for (int i = 0; i < 3; i++) {
-                m.acc.Qll_diag[i] = APP_ACC_PSD;
-                m.gyr.Qll_diag[i] = APP_GYR_PSD;
+                m.acc.Qll_diag[i] = s_p.acc_psd;
+                m.gyr.Qll_diag[i] = s_p.gyr_psd;
             }
             m.acc.is_valid = true;
             m.gyr.is_valid = true;
@@ -253,9 +271,18 @@ static void core1_main(void)
 
 /* ---- Core 0 ------------------------------------------------------------ */
 
-void nav_start(nav_antenna_t mode)
+void nav_set_params(const nav_params_t *params)
+{
+    critical_section_enter_blocking(&s_out_lock);
+    s_params_new = *params;
+    critical_section_exit(&s_out_lock);
+    s_params_seq++;
+}
+
+void nav_start(nav_antenna_t mode, const nav_params_t *params)
 {
     s_mode = mode;
+    s_params_new = *params;
     queue_init(&s_imu_q, sizeof(nav_imu_t), IMU_QUEUE_LEN);
     queue_init(&s_gnss_q, sizeof(nav_gnss_t), GNSS_QUEUE_LEN);
     queue_init(&s_baro_q, sizeof(nav_baro_t), BARO_QUEUE_LEN);

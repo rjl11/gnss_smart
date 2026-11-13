@@ -15,7 +15,8 @@ import re
 import sys
 from collections import deque
 
-DEFAULT_ROOTS = ["core1_main", "pps_irq", "bmp581_irq0", "bmp581_irq1"]
+# multicore_lockout_handler runs on core 1 while core 0 writes the settings.
+DEFAULT_ROOTS = ["core1_main", "pps_irq", "bmp581_irq0", "bmp581_irq1", "multicore_lockout_handler"]
 
 FUNC_RE = re.compile(r"^([0-9a-f]{8}) <([^>]+)>:$")
 BRANCH_RE = re.compile(r"\t(?:bl|blx|b|b\.w|b\.n|b[a-z]{2}(?:\.[wn])?)\s+[0-9a-f]+ <([^>+]+)(?:\+0x[0-9a-f]+)?>")

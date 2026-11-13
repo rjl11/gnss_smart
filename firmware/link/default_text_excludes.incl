@@ -9,6 +9,8 @@
  *   nav_suite_update() (plans/web-config-server.md, "Memory layout").
  * - queue.c, critical_section.c, timer.c: SDK calls made by the core 1 loop
  *   (queue_try_remove, the output lock, time_us_64).
+ * - pico_flash/flash.c: flash_safe_execute_core_init() runs on core 1 at
+ *   start, so settings_save() can lock it out.
  * - pico_double, pico_float: the SDK's double (DCP) and float math wrappers
  *   that INSLIB's arithmetic and libm calls resolve to.
  * - printf.c: INSLIB logs from inside nav_suite_update() through snprintf.
@@ -16,4 +18,4 @@
  *
  * Check with firmware/tools/check_ram_path.py after a build.
  */
-*(EXCLUDE_FILE(*libgcc.a: *libm.a: *libinslib.a: *nav_core1.c.obj *queue.c.obj *critical_section.c.obj *hardware_timer/timer.c.obj *pico_double/*.obj *pico_float/*.obj *pico_printf/printf.c.obj *libg.a:*memcpy*.o *libg.a:*memset*.o *libg.a:*memmove*.o *libc.a:*memcpy*.o *libc.a:*memset*.o *libc.a:*memmove*.o) .text*)
+*(EXCLUDE_FILE(*libgcc.a: *libm.a: *libinslib.a: *nav_core1.c.obj *queue.c.obj *critical_section.c.obj *hardware_timer/timer.c.obj *pico_flash/flash.c.obj *pico_double/*.obj *pico_float/*.obj *pico_printf/printf.c.obj *libg.a:*memcpy*.o *libg.a:*memset*.o *libg.a:*memmove*.o *libc.a:*memcpy*.o *libc.a:*memset*.o *libc.a:*memmove*.o) .text*)

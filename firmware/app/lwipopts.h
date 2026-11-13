@@ -58,7 +58,7 @@
 #define HTTPD_FSDATA_FILE           "pico_fsdata.inc"
 #define LWIP_HTTPD_CUSTOM_FILES     1  /* /status.json, see app/web/web.c */
 #define LWIP_HTTPD_DYNAMIC_HEADERS  1  /* headers for the custom files */
-#define LWIP_HTTPD_SUPPORT_POST     0  /* config POSTs come in Phase 4 */
+#define LWIP_HTTPD_SUPPORT_POST     1  /* POST /config, see app/web/config_web.c */
 /* Always copy into the TCP send buffer. A custom file's buffer is reused once
  * httpd closes the file, which can be before the data is acknowledged. */
 #define HTTP_IS_DATA_VOLATILE(hs)   TCP_WRITE_FLAG_COPY

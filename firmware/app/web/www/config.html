@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gnss_smart config</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--fg:#1c1f24;--dim:#6b7280;--line:#e3e6ea;--ok:#15803d;--bad:#b91c1c;--acc:#1d4ed8;--warn:#a16207}
+@media (prefers-color-scheme:dark){:root{--bg:#111316;--card:#1b1e23;--fg:#e6e8eb;--dim:#9aa1ab;--line:#2b2f36;--ok:#4ade80;--bad:#f87171;--acc:#93b4ff;--warn:#facc15}}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:12px}
+h1{font-size:18px;margin:0}
+a{color:var(--acc)}
+main{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:0 0 4px}
+.note{color:var(--dim);font-size:12px;margin:0 0 8px}
+label{display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;padding:3px 0;border-top:1px solid var(--line)}
+label:first-of-type{border-top:0}
+label small{display:block;color:var(--dim);font-size:11px}
+input,select{width:100%;padding:4px 6px;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:4px}
+input.changed,select.changed{border-color:var(--acc)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+button{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+#msg{min-height:1.4em}
+.ok{color:var(--ok)}.bad{color:var(--bad);font-weight:600}.warn{color:var(--warn)}
+</style>
+</head>
+<body>
+<header><h1>gnss_smart · config</h1><a href="/">status</a><span id="src" class="note"></span></header>
+<div id="msg"></div>
+<form id="f" autocomplete="off">
+<main>
+<section><h2>GNSS antenna position</h2>
+<p class="note">Antenna from the IMU, body frame (x forward, y right, z down), metres. Applies live: the filter restarts.</p>
+<label><span>x forward</span><input name="lever_x" inputmode="decimal"></label>
+<label><span>y right</span><input name="lever_y" inputmode="decimal"></label>
+<label><span>z down</span><input name="lever_z" inputmode="decimal"></label>
+</section>
+<section><h2>GNSS antenna mode</h2>
+<p class="note">Applies after a reboot; the receiver is re-provisioned then.</p>
+<label><span>mode</span><select name="antenna"><option value="single">single</option><option value="dual">dual (UM982)</option></select></label>
+<label><span>baseline direction<small>ANT1→ANT2, deg clockwise from forward; live</small></span><input name="baseline_yaw_deg" inputmode="decimal"></label>
+<label><span>baseline gate<small>m, live</small></span><input name="baseline_gate_m" inputmode="decimal"></label>
+</section>
+<section><h2>Filter tuning</h2>
+<p class="note">IMU noise figures. Applies live: the filter restarts.</p>
+<label><span>acc PSD<small>(m/s²)²/Hz</small></span><input name="acc_psd" inputmode="decimal"></label>
+<label><span>gyro PSD<small>(rad/s)²/Hz</small></span><input name="gyr_psd" inputmode="decimal"></label>
+<label><span>gyro bias RW<small>rad/s/√s</small></span><input name="gyr_bias_rw" inputmode="decimal"></label>
+<label><span>acc bias RW<small>m/s²/√s</small></span><input name="acc_bias_rw" inputmode="decimal"></label>
+<label><span>course min speed<small>m/s, 0 = INSLIB default</small></span><input name="automotive_min_speed" inputmode="decimal"></label>
+</section>
+<section><h2>Wi-Fi</h2>
+<p class="note">Applies after a reboot. The access point gnss_smart is open, at 192.168.4.1.</p>
+<label><span>mode</span><select name="wifi_mode"><option value="auto">auto (AP if no network in 30 s)</option><option value="sta">network only</option><option value="ap">access point only</option></select></label>
+<label><span>network</span><input name="sta_ssid" maxlength="32"></label>
+<label><span>password<small id="pwnote">empty = open network</small></span><input name="sta_password" type="password" maxlength="63" placeholder="unchanged"></label>
+</section>
+</main>
+<div class="bar">
+<button type="submit" class="primary">Save</button>
+<button type="button" data-a="defaults">Revert to defaults</button>
+<button type="button" data-a="reboot">Reboot</button>
+<button type="button" data-a="reconfigure_gnss">Reconfigure GNSS</button>
+<button type="button" data-a="reconfigure_imu">Reconfigure IMU</button>
+</div>
+</form>
+<script>
+"use strict";
+const f=document.getElementById("f"),msg=document.getElementById("msg");
+let cur=null,lastSeq=-1,pwTouched=false;
+const CONFIRM={defaults:"Erase the saved settings and go back to the build defaults?",reboot:"Reboot the unit now?",reconfigure_gnss:"Re-provision the GNSS receiver (FRESET and the full sequence)?",reconfigure_imu:"Run the IMU provisioning sequence again?"};
+function say(t,c){msg.textContent=t;msg.className=c||"";}
+function fill(d){
+  cur=d;
+  const s=d.settings;
+  for(const el of f.elements){
+    if(!el.name||el.name==="sta_password")continue;
+    if(s[el.name]!==undefined){el.value=s[el.name];el.title="default: "+d.defaults[el.name];}
+    el.classList.remove("changed");
+  }
+  f.sta_password.value="";pwTouched=false;
+  document.getElementById("pwnote").textContent=s.sta_password_set?"set; empty = open network":"none (open); empty = open network";
+  let src="settings from "+(d.source==="flash"?"flash, record "+d.seq:"build defaults");
+  if(d.reboot_pending.length)src+=" · reboot pending: "+d.reboot_pending.join(", ");
+  document.getElementById("src").textContent=src;
+}
+async function load(){
+  const r=await fetch("/config.json",{cache:"no-store"});
+  const d=await r.json();
+  return d;
+}
+async function waitResult(prev){
+  for(let i=0;i<20;i++){
+    await new Promise(r=>setTimeout(r,250));
+    try{const d=await load();if(d.last_result.seq!==prev)return d;}catch(e){}
+  }
+  return null;
+}
+async function send(params){
+  const prev=cur?cur.last_result.seq:0;
+  let r;
+  try{
+    r=await fetch("/config",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams(params).toString()});
+  }catch(e){say("no answer from the unit","bad");return;}
+  let j;
+  try{j=await r.json();}catch(e){say("unexpected reply ("+r.status+")","bad");return;}
+  if(!j.ok){say(j.error,"bad");return;}
+  say(j.queued+"…");
+  if(params.action==="reboot"){say("rebooting; reconnect in a few seconds","warn");return;}
+  const d=await waitResult(prev);
+  if(!d){say("no result from the unit","bad");return;}
+  fill(d);
+  const t=d.last_result.text;
+  say(t,/failed/.test(t)?"bad":(/reboot/.test(t)?"warn":"ok"));
+}
+f.addEventListener("input",e=>{
+  if(e.target.name==="sta_password")pwTouched=true;
+  if(cur&&e.target.name&&cur.settings[e.target.name]!==undefined)
+    e.target.classList.toggle("changed",String(cur.settings[e.target.name])!==e.target.value);
+});
+f.addEventListener("submit",e=>{
+  e.preventDefault();
+  const p={action:"save"};
+  for(const el of f.elements){if(el.name&&el.name!=="sta_password")p[el.name]=el.value.trim();}
+  if(pwTouched)p.sta_password=f.sta_password.value;
+  send(p);
+});
+for(const b of document.querySelectorAll("button[data-a]")){
+  b.addEventListener("click",()=>{const a=b.dataset.a;if(confirm(CONFIRM[a]))send({action:a});});
+}
+load().then(fill).catch(()=>say("could not read /config.json","bad"));
+</script>
+</body>
+</html>

@@ -62,8 +62,34 @@ const char *web_ssid(void);
  * loop. */
 void web_poll(uint64_t now_us);
 
-/* The text /status.json serves until the next call. Copied. */
-void web_set_status_json(const char *json, size_t len);
+/* JSON documents served from RAM. Each request gets its own copy, so a
+ * transfer in progress never sees a half-new text. */
+typedef enum {
+    WEB_DOC_STATUS = 0,   /* /status.json */
+    WEB_DOC_CONFIG,       /* /config.json */
+    WEB_DOC_COUNT
+} web_doc_t;
+
+#define WEB_DOC_MAX  2048
+
+/* The text served for doc until the next call. Copied. Main loop only. */
+void web_set_doc(web_doc_t doc, const char *json, size_t len);
+static inline void web_set_status_json(const char *json, size_t len)
+{
+    web_set_doc(WEB_DOC_STATUS, json, len);
+}
+
+/* POST handler. Runs in lwIP context (core 0, background IRQ), so it must
+ * not block or write flash: parse, validate, queue for the main loop, and
+ * write a short JSON reply into reply (at most cap bytes, length in
+ * *reply_len). The body is at most WEB_POST_MAX bytes. */
+#define WEB_POST_MAX 1024
+typedef void (*web_post_fn)(const char *uri, const char *body, size_t len, char *reply, size_t cap,
+                            size_t *reply_len);
+void web_set_post_handler(web_post_fn fn);
+
+/* Run fn inside the lwIP lock, for data shared with a POST handler. */
+void web_locked(void (*fn)(void *), void *arg);
 
 void web_get_info(web_info_t *out);
 const char *web_state_name(web_wifi_state_t s);

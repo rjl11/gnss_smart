@@ -6,14 +6,16 @@
  * Core 1 (nav_core1.c): the INSLIB nav_suite filter.
  *
  * Wi-Fi and the web server (app/web/) run when built with WEB_MODE=always:
- * station on APP_WIFI_STA_SSID, status page with /status.json
- * (plans/web-config-server.md, Phase 2).
+ * station or open AP, status page with /status.json, config page with
+ * /config.json and POST /config (plans/web-config-server.md, Phases 2-4).
+ * Settings come from flash or the build defaults (settings.h).
  *
  * No Bluetooth in this build. Pins are in board_pins.h, other settings in
  * app_config.h.
  */
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "pico/stdlib.h"
 
@@ -21,10 +23,13 @@
 #include "board_pins.h"
 #include "bmp581.h"
 #include "nav_core1.h"
+#include "settings.h"
 #include "tm210.h"
 #include "uart_dma.h"
 #include "um980.h"
 #if APP_WEB_MODE == APP_WEB_ALWAYS
+#include "hardware/watchdog.h"
+#include "web/config_web.h"
 #include "web/jsonw.h"
 #include "web/web.h"
 #endif
@@ -60,6 +65,24 @@ static um980_heading_t s_last_hdg;
 static bool s_have_hdg;
 static float s_base_median_m;
 static uint32_t s_hdg_used, s_hdg_gated;
+
+/* Settings in use (settings.h): loaded at boot, live fields replaced by a
+ * save from the web page. s_boot_settings keeps what this boot started with,
+ * for the fields that only apply after a reboot. */
+static settings_t s_settings, s_boot_settings;
+static bool s_settings_from_flash;
+
+static void nav_params_from_settings(nav_params_t *p, const settings_t *s)
+{
+    for (int i = 0; i < 3; i++) {
+        p->leverarm_m[i] = s->leverarm_m[i];
+    }
+    p->acc_psd = s->acc_psd;
+    p->gyr_psd = s->gyr_psd;
+    p->gyr_bias_rw = s->gyr_bias_rw;
+    p->acc_bias_rw = s->acc_bias_rw;
+    p->automotive_min_speed = s->automotive_min_speed;
+}
 
 static bool baro_start(void)
 {
@@ -137,7 +160,7 @@ static void forward_heading(const um980_heading_t *h)
     bool gate_ok = false;
     if (s_base_n >= BASELINE_MIN_HIST) {
         s_base_median_m = median(s_base_hist, s_base_n);
-        gate_ok = fabsf(h->length_m - s_base_median_m) <= APP_BASELINE_GATE_M;
+        gate_ok = fabsf(h->length_m - s_base_median_m) <= s_settings.baseline_gate_m;
     }
     s_base_hist[s_base_pos] = h->length_m;
     s_base_pos = (s_base_pos + 1u) % BASELINE_HIST;
@@ -152,7 +175,7 @@ static void forward_heading(const um980_heading_t *h)
     }
 
     /* Heading is clockwise from true north, as NED yaw. */
-    double yaw = (double)(h->heading_deg - APP_BASELINE_YAW_DEG) / DEG;
+    double yaw = (double)(h->heading_deg - s_settings.baseline_yaw_deg) / DEG;
     yaw = remainder(yaw, 2.0 * M_PI);
     float sd = h->sd_heading_deg;
     float floor_deg = APP_HEADING_SD_FLOOR_DEG_1M / h->length_m;
@@ -455,6 +478,7 @@ static void publish_status_json(uint64_t now, uint32_t baro_hz)
         jw_int(&w, "stack_used_b", nav_stack_used());
         jw_int(&w, "stack_size_b", nav_stack_size());
         jw_int(&w, "queue_drops", nav_queue_drops());
+        jw_int(&w, "reinits", o.n_reinit);
         if (o.rpy_valid) {
             float rpy[3] = { (float)(o.rpy_rad[0] * DEG), (float)(o.rpy_rad[1] * DEG),
                              (float)(o.rpy_rad[2] * DEG) };
@@ -502,6 +526,81 @@ static void publish_status_json(uint64_t now, uint32_t baro_hz)
 }
 #endif
 
+#if APP_WEB_MODE == APP_WEB_ALWAYS
+static uint64_t s_reboot_at;
+
+/* Live fields: the filter settings go to core 1, which re-initialises; the
+ * heading gate and baseline direction are read from s_settings on core 0. */
+static void apply_live(const settings_t *s)
+{
+    nav_params_t old_p, new_p;
+    nav_params_from_settings(&old_p, &s_settings);
+    nav_params_from_settings(&new_p, s);
+    if (memcmp(&old_p, &new_p, sizeof old_p) != 0) {
+        nav_set_params(&new_p);
+    }
+    s_settings = *s;
+}
+
+/* A command from the web config page (config_web.h). */
+static void handle_config_cmd(uint64_t now)
+{
+    config_cmd_t cmd;
+    if (!config_web_take(&cmd)) {
+        return;
+    }
+    char res[160];
+    switch (cmd.kind) {
+    case CFG_CMD_SAVE: {
+        uint64_t t0 = time_us_64();
+        int rc = settings_save(&cmd.settings);
+        unsigned long ms = (unsigned long)((time_us_64() - t0) / 1000u);
+        if (rc != 0) {
+            snprintf(res, sizeof res, "save failed: flash error %d; nothing changed", rc);
+            break;
+        }
+        apply_live(&cmd.settings);
+        s_settings_from_flash = true;
+        snprintf(res, sizeof res, "saved as record %lu in %lu ms%s", (unsigned long)settings_seq(), ms,
+                 settings_reboot_fields_differ(&s_settings, &s_boot_settings)
+                     ? "; reboot to apply the antenna / Wi-Fi changes" : "");
+        break;
+    }
+    case CFG_CMD_DEFAULTS: {
+        int rc = settings_erase();
+        if (rc != 0) {
+            snprintf(res, sizeof res, "erase failed: flash error %d; nothing changed", rc);
+            break;
+        }
+        settings_t d;
+        settings_defaults(&d);
+        apply_live(&d);
+        s_settings_from_flash = false;
+        snprintf(res, sizeof res, "build defaults restored%s",
+                 settings_reboot_fields_differ(&s_settings, &s_boot_settings)
+                     ? "; reboot to apply the antenna / Wi-Fi changes" : "");
+        break;
+    }
+    case CFG_CMD_REBOOT:
+        s_reboot_at = now + 500000u; /* lets the reply and the next poll go out */
+        snprintf(res, sizeof res, "rebooting");
+        break;
+    case CFG_CMD_RECONFIGURE_GNSS:
+        um980_reconfigure(&s_gnss);
+        snprintf(res, sizeof res, "GNSS receiver: full re-provision started");
+        break;
+    case CFG_CMD_RECONFIGURE_IMU:
+        tm210_reconfigure(&s_imu);
+        snprintf(res, sizeof res, "IMU: provisioning sequence started");
+        break;
+    default:
+        return;
+    }
+    printf("[config] %s\n", res);
+    config_web_publish(&s_settings, &s_boot_settings, s_settings_from_flash, res);
+}
+#endif
+
 int main(void)
 {
     stdio_init_all();
@@ -513,19 +612,33 @@ int main(void)
     }
     printf("\ngnss_smart demo: TM210 + UM980 + BMP581 -> INSLIB nav_suite\n");
 
+    /* Settings from flash, or the build defaults. A record that fails the
+     * range check (e.g. written by an older build) is not used. */
+    s_settings_from_flash = settings_load(&s_settings);
+    const char *bad = settings_validate(&s_settings);
+    if (bad != NULL) {
+        printf("[settings] saved record rejected (%s), using defaults\n", bad);
+        settings_defaults(&s_settings);
+        s_settings_from_flash = false;
+    }
+    s_boot_settings = s_settings;
+    printf("[settings] %s\n", s_settings_from_flash ? "loaded from flash" : "build defaults");
+
 #if APP_WEB_MODE == APP_WEB_ALWAYS
     /* Before the sensor UARTs start: loading the CYW43439 firmware blocks for
      * a few hundred ms, longer than the IMU ring holds. The join itself runs
      * in the background from web_poll(). */
     const web_config_t web_cfg = {
-        .mode = APP_WIFI_MODE == APP_WIFI_AP  ? WEB_NET_AP :
-                APP_WIFI_MODE == APP_WIFI_STA ? WEB_NET_STA : WEB_NET_AUTO,
-        .ssid = APP_WIFI_STA_SSID, .password = APP_WIFI_STA_PASSWORD,
+        .mode = s_settings.wifi_mode == APP_WIFI_AP  ? WEB_NET_AP :
+                s_settings.wifi_mode == APP_WIFI_STA ? WEB_NET_STA : WEB_NET_AUTO,
+        .ssid = s_settings.sta_ssid, .password = s_settings.sta_password,
         .ap_ssid = APP_WIFI_AP_SSID, .ap_fallback_s = APP_WIFI_AP_FALLBACK_S,
         .hostname = APP_WEB_HOSTNAME,
     };
     uint64_t t_web = time_us_64();
     bool web_ok = web_init(&web_cfg);
+    config_web_init();
+    config_web_publish(&s_settings, &s_boot_settings, s_settings_from_flash, NULL);
     printf("[web] init %s in %lu ms\n", web_ok ? "done" : "failed",
            (unsigned long)((time_us_64() - t_web) / 1000u));
 #endif
@@ -538,8 +651,8 @@ int main(void)
     }
 
     const tm210_config_t imu_cfg = { .acc_is_gravity = APP_TM210_ACC_IS_GRAVITY, .verbose = true };
-    /* The antenna-mode setting. The web page will override it from flash. */
-    const bool dual_set = APP_GNSS_ANTENNA_MODE == APP_ANTENNA_DUAL;
+    /* The antenna-mode setting: build default, or the web page's saved value. */
+    const bool dual_set = s_settings.antenna_dual != 0;
     printf("GNSS antenna mode setting: %s\n", dual_set ? "dual" : "single");
 
     const um980_config_t gnss_cfg = {
@@ -550,7 +663,9 @@ int main(void)
     s_baro_ok = baro_start();
 
     nav_antenna_t ant_sent = dual_set ? NAV_ANT_DUAL : NAV_ANT_SINGLE;
-    nav_start(ant_sent);
+    nav_params_t np;
+    nav_params_from_settings(&np, &s_settings);
+    nav_start(ant_sent, &np);
 
     uint64_t next_status = time_us_64() + STATUS_PERIOD_US;
     uint64_t next_baro_try = time_us_64() + BARO_RETRY_US;
@@ -622,6 +737,14 @@ int main(void)
 
 #if APP_WEB_MODE == APP_WEB_ALWAYS
         web_poll(now);
+        handle_config_cmd(now);
+        if (s_reboot_at != 0 && now >= s_reboot_at) {
+            printf("[config] reboot\n");
+            watchdog_reboot(0, 0, 0);
+            for (;;) {
+                tight_loop_contents();
+            }
+        }
 #endif
 
         if (now >= next_status) {

@@ -29,6 +29,7 @@ add_subdirectory(drivers/inslib)
 add_executable(app
     app/main.c
     app/nav_core1.c
+    app/settings.c
 )
 
 target_include_directories(app PRIVATE app)
@@ -69,7 +70,7 @@ else()
 endif()
 if(WEB_MODE STREQUAL "always")
     add_subdirectory(drivers/ap_servers)
-    target_sources(app PRIVATE app/web/web.c app/web/jsonw.c)
+    target_sources(app PRIVATE app/web/web.c app/web/jsonw.c app/web/config_web.c)
     target_link_libraries(app PRIVATE ap_servers)
     target_compile_definitions(app PRIVATE
         APP_WEB_MODE=1
@@ -83,7 +84,9 @@ if(WEB_MODE STREQUAL "always")
         pico_lwip_http
         pico_lwip_mdns
     )
-    pico_set_lwip_httpd_content(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/app/web/www/index.html)
+    pico_set_lwip_httpd_content(app PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/app/web/www/index.html
+        ${CMAKE_CURRENT_LIST_DIR}/app/web/www/config.html)
 elseif(WEB_MODE STREQUAL "off")
     target_compile_definitions(app PRIVATE APP_WEB_MODE=0)
 elseif(WEB_MODE STREQUAL "switch")
@@ -97,6 +100,9 @@ target_link_libraries(app PRIVATE
     pico_multicore
     pico_util
     pico_sync
+    pico_flash
+    hardware_flash
+    hardware_watchdog
     hardware_uart
     hardware_i2c
     uart_dma
