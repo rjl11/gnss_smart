@@ -18,4 +18,4 @@
  *
  * Check with firmware/tools/check_ram_path.py after a build.
  */
-*(EXCLUDE_FILE(*libgcc.a: *libm.a: *libinslib.a: *nav_core1.c.obj *queue.c.obj *critical_section.c.obj *hardware_timer/timer.c.obj *pico_flash/flash.c.obj *pico_double/*.obj *pico_float/*.obj *pico_printf/printf.c.obj *libg.a:*memcpy*.o *libg.a:*memset*.o *libg.a:*memmove*.o *libc.a:*memcpy*.o *libc.a:*memset*.o *libc.a:*memmove*.o) .text*)
+*(EXCLUDE_FILE(*libgcc.a: *libm.a: *libinslib.a: *nav_core1.c.o* *queue.c.o* *critical_section.c.o* *hardware_timer/timer.c.o* *pico_flash/flash.c.o* *pico_double/*.o* *pico_float/*.o* *pico_printf/printf.c.o* *libg.a:*memcpy*.o *libg.a:*memset*.o *libg.a:*memmove*.o *libc.a:*memcpy*.o *libc.a:*memset*.o *libc.a:*memmove*.o) .text*)

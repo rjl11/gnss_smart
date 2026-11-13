@@ -1,4 +1,4 @@
 /* gnss_smart: read-only data that sits in SRAM in the flash (XIP) build, so
  * the core 1 filter never waits on the XIP cache for a constant. Overrides the
  * SDK file of the same name; see default_text_excludes.incl. */
-*(EXCLUDE_FILE(*libgcc.a: *libm.a: *libinslib.a: *nav_core1.c.obj *pico_double/*.obj *pico_float/*.obj) .rodata*)
+*(EXCLUDE_FILE(*libgcc.a: *libm.a: *libinslib.a: *nav_core1.c.o* *pico_double/*.o* *pico_float/*.o*) .rodata*)
