@@ -205,10 +205,12 @@ This target was applied in RAM on the bench and acknowledged. Over USB the TM210
 - The Ack for a RAM write that changes the baud arrives at the old baud, but the new baud never becomes active (see "Baud" above). This was open item 1; the old provisioning got stuck on it, because its layout guard then saw a baud word that didn't match the rate in use.
 - 921600 saved to flash over USB (bit 18 = 1, acknowledged, read back with bit 18 set), then power-cycled: the Pico found it at 921600, the fast path passed with nothing written, and RUN gave 802–804 Hz CMD 41 with 0 CRC errors and 0 gaps. INSLIB ran in ATTITUDE_ONLY with a mean update of 96 µs (max 158 µs).
 - With USB connected, the Pico's UART requests went unanswered after a power cycle (see "USB" above).
+- **Provisioning from 115200 by our code passed.** The TM210's original flash settings were written back over USB (115200, 50 Hz, raw + RPY, silent time 1 s). After a power cycle the Pico applied the target in RAM, saved 921600 to flash and waited in `power-cycle`; rescans every 2 s found it at 115200 with 921600 set and wrote nothing more. After the next power cycle the TM210 streamed at 921600, and the Pico found it there: fast path, "settings already match, nothing written", RUN at 802–804 Hz with 0 CRC errors.
+  - Between the two steps the TM210 again sent data but answered no request, this time also with USB unplugged, and at the same time the BMP581 failed with I2C errors. Both recovered after the bench wiring was checked, so that episode was the wiring, not the TM210. The USB note above may have the same cause.
 
 **Still to do:**
 1. **UART link:** 800 ± 20 Hz CMD 41 at 921600 with zero CRC errors over 10 minutes.
-2. **Factory-default TM210 (115200):** the Pico applies the target in RAM, saves 921600 to flash and asks for a power cycle; after it the fast path passes. The flash write and the `power-cycle` state are not yet tested by our code (the bench flash write above was done over USB by a script).
+2. **Factory-default TM210:** provisioning from 115200 passed on 2026-11-13 (above), starting from the settings this unit shipped with. Still to do: a unit really at factory defaults, and the web page showing the `power-cycle` message.
 3. **Power-cycle:** the fast path passes and there is no flash write (passed once, 2026-11-13). A flash commit at 921600 (bit 18 = 1) has not yet been exercised by our code.
 4. **Mismatch:** turn RPY on in ImuAssistant and save. On the next boot it is detected and corrected.
 5. **Interrupted provisioning:** remove power between steps 3.1 and 3.4. The next boot finds the old flash settings and provisions again.
