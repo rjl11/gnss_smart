@@ -83,6 +83,7 @@ static void filter_init(nav_antenna_t mode)
      * pulls the wrong way when reversing (plans/gnss-um98x-config.md). */
     opt.automotive_mode = mode != NAV_ANT_DUAL;
     opt.automotive_min_speed_mps = s_p.automotive_min_speed;
+    opt.estimate_mag_bias = APP_FEED_MAG && APP_ESTIMATE_MAG_BIAS;
 
     nav_suite_init(&s_suite, &init, &opt);
     s_mag_model_set = false;

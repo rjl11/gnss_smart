@@ -76,7 +76,7 @@ Evidence for the accelerometer sign, from another project: the AgOpenWeb-HAT IMU
 
 Do the sign/unit conversion in the parser so all later data is plain FRD SI. Put the **physical mounting** (TM210 not aligned with the vehicle) into config as `mount_rpy_deg` and compose it into `imu_acc_misalignment` / `imu_gyr_misalignment` with `imu_mount_compose()` from `external/INSLIB/tools/imu_mount.h`.
 
-Magnetometer: the TM210 samples it at 75 Hz but repeats it in every 800 Hz packet. Set `mag.is_valid` only when the value changes. Keep it off for the INS until it is calibrated on the vehicle ([inslib-nav-suite.md](inslib-nav-suite.md)).
+Magnetometer: the TM210 samples it at 75 Hz but repeats it in every 800 Hz packet. Set `mag.is_valid` only when the value changes. It is fed to INSLIB from boot (user decision 2026-11-13, `APP_FEED_MAG` in `firmware/app/app_config.h`): the AHRS and the INS both use it, INSLIB applies its own World Magnetic Model for the declination, and the INS estimates the hard-iron bias. The on-vehicle calibration (step 4 below) refines it later ([inslib-nav-suite.md](inslib-nav-suite.md), "Magnetometer").
 
 ## INSLIB noise parameters
 Start values from the datasheet, to be replaced by Allan variance results:
@@ -107,7 +107,7 @@ So the x and y gyro noise may be about 2× the datasheet-derived figure, and the
    - **Size:** 40 B × 800 Hz ≈ 115 MB/h of raw payload.
 2. **6-position static test** (each axis up and down, ~30 s each) → `external/INSLIB/tools/inslib_imu_calib.py` → accelerometer scale and fixed bias, gyro fixed bias, into `imu_acc_misalignment` / `imu_*_fixed_bias`. This also fixes the "units, not absolute" accelerometer magnitude.
 3. **Mount angles** on the vehicle: `external/INSLIB/tools/inslib_frame_align.py` or measure, set `mount_rpy_deg`.
-4. **Magnetometer** (later, on the vehicle): `external/INSLIB/tools/inslib_mag_calib.py` → `mag_misalignment`, `mag_fixed_bias`.
+4. **Magnetometer** (on the vehicle, with the TM210 in its final place): `external/INSLIB/tools/inslib_mag_calib.py` → `mag_misalignment`, `mag_fixed_bias`. The mag is already in use before this; the calibration removes the tractor's soft-iron distortion and most of its hard-iron offset, which the INS's bias estimate otherwise has to find while turning.
 
 ## Bench checks (after conversion, FRD)
 Expected specific force: `f = (g·sinθ, −g·sinφ·cosθ, −g·cosφ·cosθ)` for pitch θ, roll φ.

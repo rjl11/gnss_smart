@@ -36,7 +36,8 @@ What that buys over bare `ins`:
 | `gnss_pos_cov_scale`, `gnss_pos_stddev_floor_*` | tune from RTK logs | Receiver σ is often optimistic |
 | `automotive_lateral_constraint` | false until the mount is calibrated | Needs a correct mounting matrix |
 | `imu_acc_misalignment` / `imu_gyr_misalignment`, `imu_*_fixed_bias` | from IMU calibration + mount angles | See [imu-tm210.md](imu-tm210.md) |
-| `mag_field_check_disable` / magnetometer | mag not fed to the INS at first | A steel tractor disturbs it; enable after on-vehicle calibration |
+| `mag_field_check_disable` | false (the field-strength gate stays on) | Downweights samples whose field strength is more than 30 % off the WMM value, e.g. near steel or a running engine. See "Magnetometer" |
+| `estimate_mag_bias` | true (18 error states) | Hard-iron bias of the mounted TM210, learned while turning (`APP_ESTIMATE_MAG_BIAS`) |
 
 `ins_init_t`: leave position at zero (auto-init replaces it), set the bias random walks and initial σ from the IMU plan; leave other fields at 0 for INSLIB defaults.
 
@@ -48,7 +49,7 @@ Zero `ins_measurements_t` every epoch. Set `is_valid` only on an epoch that carr
 | `timestamp` | TM210 sample time on the Pico µs clock | 64-bit, monotonic |
 | `strapdown_dt_sec` | difference of TM210 timestamps | ~1.25 ms |
 | `acc`, `gyr` | TM210 raw object, converted to FRD SI | `Qll_diag` = PSD, see IMU plan |
-| `mag` | TM210 raw mag, only when the value changed | Off for the INS at first |
+| `mag` | TM210 raw mag in µT, only when the value changed (75 Hz) | `Qll_diag` left 0 (INSLIB default σ). The INS fuses it at most once per second (`magnetometer_min_delay_ms` default 1000) |
 | `gnss_pos` | UM98x BESTNAVB at 20 Hz ([gnss-um98x-config.md](gnss-um98x-config.md)): lat/lon in rad, ellipsoid height = hgt (MSL) + undulation, σ → diagonal `Qll_ned` | Only when solution status is usable |
 | `gnss_vel` | BESTNAVB horizontal speed + track + vertical speed → NED, σ → diagonal `Qll_ned` | |
 | `gnss_leverarm_b` | antenna position relative to the IMU, FRD [m] | Measure on the vehicle |
@@ -57,6 +58,14 @@ Zero `ins_measurements_t` every epoch. Set `is_valid` only on an epoch that carr
 | `baro` | BMP581 pressure [Pa], 100 Hz | New samples only |
 
 GNSS and baro samples are attached to the next IMU epoch after they arrive on core 1; the delay fields carry how old they are.
+
+## Magnetometer
+User decision 2026-11-13: the TM210 magnetometer is used from boot, before any on-vehicle calibration (`APP_FEED_MAG` and `APP_ESTIMATE_MAG_BIAS` in `firmware/app/app_config.h`).
+- **Where it goes:** `m.mag` feeds both the AHRS sub-filter (which only runs once a mag sample has been seen) and the INS. The INS fuses it at most once per second, so it is a weak yaw reference beside GNSS course or the dual-antenna heading. It also gives the INS a heading at auto-init before the tractor moves (single antenna), and the AHRS a heading in ATTITUDE_ONLY.
+- **Declination:** INSLIB's own World Magnetic Model (`external/INSLIB/src/magnetic_model.h`, WMM 2025 grid), set from the first GNSS fix by `nav_suite_set_magnetic_model_position()` (lifecycle step 4). The receiver's value isn't needed: the UM980 does report one (GPRMC magnetic variation, 5.4° E on the bench 2026-11-13), but only in NMEA.
+- **Field-strength gate:** on (`mag_field_check_disable` false). A sample whose |B| is more than 30 % off the WMM total field is downweighted. The TM210's scale is approximate (one factory "Earth field" ≈ 50 µT, [imu-tm210.md](imu-tm210.md)), close enough for the gate in Scandinavia; check it against the WMM value on the bench.
+- **Hard-iron bias:** estimated by the INS (`estimate_mag_bias`, 18 error states, INSLIB defaults 10 µT initial σ and 1 µT/min random walk). It separates from the yaw error only while the vehicle turns.
+- **Still to do:** the on-vehicle calibration with `inslib_mag_calib.py` for `mag_misalignment` / `mag_fixed_bias` ([imu-tm210.md](imu-tm210.md), step 4), and field logs of how often the gate rejects samples on a running tractor. The CPU cost of 18 instead of 15 states is not yet measured (the cycle-count bench in [rp2350-feasibility.md](rp2350-feasibility.md)).
 
 ## Outputs (10 Hz)
 `$PAOGI` is the AgOpenWeb sentence sent over Ethernet, which is on hold ([ethernet-w5500-agopenweb.md](ethernet-w5500-agopenweb.md)). For now, BLE NMEA is the only output.
@@ -71,7 +80,7 @@ GNSS and baro samples are attached to the next IMU epoch after they arrive on co
 Antenna vs IMU vs vehicle reference point: output the position of the point AgOpenWeb expects (lever arm applied), not the IMU position.
 
 ## Diagnostics (web page)
-Mode, `nav_suite_get_zaru_active()`, `nav_suite_get_vertical_zupt_active()`, `suite.n_imu_loss`, INS vs ARS/AHRS yaw difference, estimated gyro/acc biases, IMU temperature from the TM210 status object.
+Mode, `nav_suite_get_zaru_active()`, `nav_suite_get_vertical_zupt_active()`, `suite.n_imu_loss`, INS vs ARS/AHRS yaw difference, estimated gyro/acc biases, the estimated mag hard-iron bias (`ins_get_bias_mag()`) and measured |B| against the WMM field, IMU temperature from the TM210 status object.
 
 ## Verification
 1. Record a drive: TM210 raw, UM980 logs and BMP581 pressure, all timestamped on the Pico clock (SD card or USB). Convert to INSLIB's CSV layout (`external/INSLIB/doc/example_imu.csv`, `example_gnss.csv`).

@@ -30,10 +30,18 @@
  * for yaw (plans/inslib-nav-suite.md). */
 #define APP_AUTOMOTIVE_MIN_SPEED    0.0f
 
-/* The magnetometer is not fed to INSLIB until it is calibrated on the
- * vehicle. Without it the AHRS filter stays off and yaw comes from the INS
- * (GNSS course) or the free-running ARS. */
-#define APP_FEED_MAG                0
+/* The TM210 magnetometer is fed to INSLIB (the AHRS and the INS). INSLIB
+ * applies its own World Magnetic Model for the declination and the expected
+ * field strength once core 1 has a GNSS position, and gates samples whose
+ * field strength is off (a steel tractor). 0 leaves the AHRS off and yaw
+ * comes from the INS (GNSS course or dual-antenna heading) or the ARS. */
+#define APP_FEED_MAG                1
+
+/* Estimate the magnetometer hard-iron bias in the INS (18 error states).
+ * It converges while the vehicle turns. The on-vehicle calibration
+ * (inslib_mag_calib.py, plans/imu-tm210.md) will add fixed soft- and
+ * hard-iron terms later. */
+#define APP_ESTIMATE_MAG_BIAS       1
 
 /* GNSS antenna mode (plans/gnss-um98x-config.md, "Antenna mode").
  * Single: UM980, or UM982 with the slave antenna off; yaw from the GNSS

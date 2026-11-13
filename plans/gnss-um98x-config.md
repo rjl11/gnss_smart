@@ -246,8 +246,8 @@ In VARIABLELENGTH mode the receiver doesn't check the baseline length against a 
 - **`m.yaw_delay_ms` / `yaw_delay_us`:** the same as the GNSS epoch, from the log's GNSS time against the PPS-anchored capture time.
 - **One queue:** UNIHEADINGB and BESTNAVB go to core 1 through the same core 0 → core 1 queue, as separate items, each with its own time of validity, so their arrival order doesn't matter. Core 1 only gets a heading that passed the checks below, and fills `m.yaw` from it.
 - **Auto-init:** with `auto_init` true, the INS bootstraps yaw from the external yaw measurement (`ins.h`, auto-init comment). In dual mode the yaw is then known before the tractor moves.
-- **Mag:** unchanged (not fed to the INS).
-- What is lost with `automotive_mode` off: no heading aiding while the dual-antenna heading is invalid but the position is good (e.g. ANT2 shadowed). The gyro holds yaw over such gaps. Field logs should show how often that happens. If it does, revisit: feed course yaw from the firmware side as a second `m.yaw` source only when the UNIHEADING is invalid and the tractor is moving forward.
+- **Mag:** fed to the INS in every antenna mode ([inslib-nav-suite.md](inslib-nav-suite.md), "Magnetometer"). In dual mode it has much less weight than the GNSS heading.
+- What is lost with `automotive_mode` off: no course-over-ground aiding while the dual-antenna heading is invalid but the position is good (e.g. ANT2 shadowed). The gyro holds yaw over such gaps, with the magnetometer as a weak reference. Field logs should show how often that happens. If it does, revisit: feed course yaw from the firmware side as a second `m.yaw` source only when the UNIHEADING is invalid and the tractor is moving forward.
 
 ### Outputs
 - **NMEA to SW Maps:** add `$GNHDT` (true heading, from the INS yaw) at 10 Hz, only once the INS heading is valid. SW Maps and other apps show it as the heading. GGA/RMC are unchanged.
