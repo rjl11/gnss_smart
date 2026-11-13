@@ -104,36 +104,55 @@ So the x and y gyro noise may be about 2× the datasheet-derived figure, and the
 Expected specific force: `f = (g·sinθ, −g·sinφ·cosθ, −g·cosφ·cosθ)` for pitch θ, roll φ.
 - Level → acc ≈ (0, 0, −9.81). Done: the raw object is the gravity vector, so the conversion in the table is `(−ax, ay, az)` (results below).
 - Nose up → acc_x > 0. Right side down → acc_y < 0.
-- Turn right (clockwise seen from above) → gyr_z > 0. Roll right → gyr_x > 0. Nose up → gyr_y > 0.
+- Turn right (clockwise seen from above) → gyr_z > 0. Roll right → gyr_x > 0. Nose up → gyr_y > 0. Done: all three as expected with `(gx, −gy, −gz)` (results below).
 - Rate: 800 ± 20 packets/s, CRC error rate ≈ 0 over 10 minutes with the real cable length.
 - Timestamp wrap: run > 72 min and check the unwrapped time stays monotonic.
 - Run INSLIB's static auto-init on the bench: roll/pitch converge to the table angle, mode reaches ATTITUDE_ONLY without GNSS.
 
-### Bench results (2026-11-12, TM210 on miniPi over USB)
-The TM210 (node ID 925) on miniPi's USB as `/dev/ttyACM0`, read with a termios script (no pyserial). Its flash settings were the originals: 50 Hz, raw + RPY, UART output on, **USB output off** (bit 20 = 0), baud 115200, silent time 1. With USB output off it still answered Setting and Status requests over USB, but streamed nothing. For the tests the target was written to RAM only (bit 18 = 0): raw only, 800 Hz, UART + USB on, silent time 0, baud unchanged. It was acknowledged and read back. A power cycle restores the flash settings.
+### Bench results (2026-11-12/13, TM210 over USB on miniPi and on the Windows PC)
+The TM210 (node ID 925) was read over its USB port with a Python script: on miniPi as `/dev/ttyACM0` (termios, no pyserial) on 2026-11-12, and on the Windows PC as COM13 (pyserial) on 2026-11-13. For each run the target was written to RAM only (bit 18 = 0): raw only, 800 Hz, UART + USB on, silent time 0, baud unchanged. It was acknowledged and read back. A power cycle restores the flash settings.
 
-**Accelerometer sign: the gravity vector.** Raw values (TM210 frame, g), 1 s means, the TM210 still on a table:
+- **Flash settings as found:** on miniPi, switches `0x0008a85b`: 50 Hz, raw + RPY, UART on, **USB output off** (bit 20 = 0), baud 115200, silent time 1. With USB output off the TM210 still answered Setting and Status requests over USB, but streamed nothing. On the PC the next day they read `0x001ea85f`: the same plus bit 2 (mag enable), bits 17/18 and **bit 20 = 1**, which is what a save from ImuAssistant leaves. Rate, outputs, baud and silent time were unchanged.
 
-| Position | ax | ay | az | Reading |
-|---|---|---|---|---|
-| Flat, top face up | −0.049 | +0.058 | **−0.997** | z up and az < 0: gravity, not specific force |
-| X arrow raised about 33° | **−0.541** | −0.131 | −0.831 | gravity along −x |
-| Y arrow raised about 30° | −0.037 | **−0.494** | −0.865 | gravity along −y |
+**Accelerometer sign: the gravity vector.** Raw values (TM210 frame, g), 1 s means, held still:
 
-|a| was 0.997–1.000 in every position. After `(−ax, ay, az) × 9.8158`, nose up gives acc_x = +5.3 m/s² and right side down gives acc_y = −4.85 m/s², as the checks above expect. The case markings and the data agree on a right-handed FLU frame. **The gyro sign check is still open:** the yaw, roll and pitch rotations have not been recorded yet.
+| Position | Host | ax | ay | az | Reading |
+|---|---|---|---|---|---|
+| Flat, top face up | miniPi | −0.049 | +0.058 | **−0.997** | z up and az < 0: gravity, not specific force |
+| Flat, top face up | PC | +0.022 | +0.017 | **−0.997** | same |
+| X arrow raised about 33° | miniPi | **−0.541** | −0.131 | −0.831 | gravity along −x |
+| X arrow raised about 36° | PC | **−0.584** | +0.015 | −0.811 | same |
+| Y arrow raised about 30° | miniPi | −0.037 | **−0.494** | −0.865 | gravity along −y |
+| Y arrow raised about 33° | PC | −0.021 | **−0.548** | −0.830 | same |
+
+|a| was 0.995–1.000 in every position. After `(−ax, ay, az) × 9.8158`, nose up gives acc_x > 0 (+5.3 m/s²) and right side down gives acc_y < 0 (−4.85 m/s²), as the checks above expect. The case markings and the data agree on a right-handed FLU frame.
+
+**Gyro sign (PC, 2026-11-13): as expected, rad/s, FLU.** Rotations by hand, 1 s means:
+
+| Motion | Dominant axis, 1 s means | FLU sign | FRD after `(gx, −gy, −gz)` |
+|---|---|---|---|
+| Y side raised about 45° (about +x) | gx +0.637, back −0.653 | + | roll right → gyr_x > 0 ✓ |
+| X end lowered about 45° (about +y) | gy +0.249, +0.423, back −0.631 | + | nose up → gyr_y > 0 ✓ |
+| Counter-clockwise from above (about +z), about 22° | gz +0.103, +0.220, +0.059 | + | turn right → gyr_z > 0 ✓ |
+
+The accelerometer moved the same way at each step (ay to −0.66 when the Y side went up, ax to +0.66 when the X end went down). At rest the 1 s gyro means stay within ±0.001 rad/s.
 
 **Rate and link, 10 min static over USB:**
 
-| Item | Result |
-|---|---|
-| Raw packets | 480 548 in 599 s, mean 802.25 per host second; every full second 794–803 |
-| CRC errors, skipped bytes, other objects | 0, 0, 0 |
-| TM210 timestamp steps | 479 863 × 1 250 µs and 684 × 2 500 µs; none longer, none backwards |
-| Status (on request) | 17.2 °C, internal rate 802 Hz, QoS 5 (2026-11-13) |
+| Item | miniPi (2026-11-12) | PC (2026-11-13) |
+|---|---|---|
+| Raw packets in 599 s | 480 548, mean 802.25 per host second | 481 225, mean 803.38 per host second |
+| Full seconds | 794–803 | 789–816; one second 724 (the gap below) |
+| CRC errors, skipped bytes, other objects | 0, 0, 0 | 0, 0, 0 |
+| TM210 timestamp steps | 479 863 × 1 250 µs, **684 × 2 500 µs** | 481 222 × 1 250 µs, 1 × 2 500 µs, **1 × 96 250 µs** |
+| Backward steps | 0 | 0 |
+| Status (on request) | 17.2 °C, 802 Hz, QoS 5 | 17.8 → 18.5 °C, 802 Hz, QoS 4–5 |
 
-- **The 2 500 µs steps are samples the TM210 itself skips** (about 0.14 %), not link losses: no byte or CRC was bad. They sit exactly at the firmware's gap limit (`GAP_US` 2500, gap only if longer), so they aren't flagged. INSLIB gets the right `dt` for them from the timestamp difference.
-- **The TM210 clock runs a few tenths of a percent fast against the Pi's:** 802 packets per host second while its own timestamps step 1 250 µs (800 Hz), and the Status object reports 802 Hz. An estimate from host-second counting, not measured precisely. The firmware's offset-and-drift mapping to the Pico clock has to absorb it.
-- **Not covered:** this was the USB port, not the TM210's UART, so the UART link test ([imu-tm210-config.md](imu-tm210-config.md), "Still to do" 1) and the run with the real cable length are still open. The timestamp-wrap run (> 72 min) is open too.
+- **Missing samples are whole packets, and their number depends on the host,** so they are most likely lost on the TM210's USB side, not skipped by the sensor: 684 single-packet steps on miniPi (whose `dwc_otg` USB already drops bytes from the UM982's CH340), 1 on the PC. Every byte that arrived was in a valid packet, and USB packets (64 B) don't line up with 49-byte EasyProtocol packets, so the loss happens before the data reaches the USB pipe. That fits an STM32 virtual COM port that drops a packet when the host hasn't collected the previous one yet. A cause, not a measured fact.
+- **The one long gap on the PC** (96.25 ms, 76 packets) has the same signature: the timestamps jump forward, nothing is corrupted. A Windows host stall is the likely cause.
+- **For the firmware:** the UART has no such host side, so the UART link test ([imu-tm210-config.md](imu-tm210-config.md), "Still to do" 1) will show whether the TM210 ever skips samples by itself. Until then, the 2 500 µs steps sit exactly at the firmware's gap limit (`GAP_US` 2500, gap only if longer) and are not flagged; INSLIB gets the right `dt` from the timestamp difference either way.
+- **The TM210 clock runs a few tenths of a percent fast against the host:** about 802–803 packets per host second while its own timestamps step 1 250 µs (800 Hz), and the Status object reports 802 Hz. An estimate from host-second counting, not measured precisely. The firmware's offset-and-drift mapping to the Pico clock has to absorb it.
+- **Not covered:** the TM210's UART, the run with the real cable length, and the timestamp-wrap run (> 72 min).
 
 ## Vibration check
 The datasheet gives no g-sensitivity or vibration rectification figure, so measure it. The method and the reference levels come from the AgOpenWeb-HAT evaluation (same document, §8.3–8.4, a TM171 on a three-cylinder tractor, 2026-11-08); the results are theirs, not measured on our hardware.
