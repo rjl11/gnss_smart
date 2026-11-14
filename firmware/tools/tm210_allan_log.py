@@ -11,7 +11,10 @@ What it does:
      saved to flash, so a power cycle restores the IMU's own settings.
   2. Logs every byte the IMU sends to <out>/raw.bin, unchanged, from the
      start. Status is requested at 1 Hz; its replies land in raw.bin too and
-     are also written with the host time to <out>/status.csv.
+     are also written with the host time to <out>/status.csv. With
+     --no-status the requests stop at the record start (the warm-up still
+     uses them to wait for QoS), so the recorded data has no request traffic
+     in it and no temperature.
   3. Marks the record start in <out>/meta.json once the warm-up time has
      passed AND Status QoS has reached --qos (the user guide's heat-up). If
      QoS never gets there, it starts anyway --qos-timeout minutes after the
@@ -133,6 +136,7 @@ class Logger:
         self.meta = {"tool": "tm210_allan_log.py", "port": args.port,
                      "host_start": self.t0, "host_start_iso": _iso(self.t0),
                      "warmup_min": args.warmup_min, "qos_min": args.qos,
+                     "no_status": args.no_status,
                      "hours": args.hours, "step_us": STEP_US,
                      "record_start_offset": None}
         # Stats.
@@ -316,7 +320,7 @@ class Logger:
 
     def tick(self):
         now = time.time()
-        if now >= self.next_status_req:
+        if now >= self.next_status_req and not (self.args.no_status and self.record_t):
             self.port.write(ep.request(ep.CMD_STATUS))
             self.next_status_req = now + 1.0
         if now - self.last_fsync >= FSYNC_S:
@@ -357,6 +361,8 @@ class Logger:
 
     def report(self, now):
         temp = f"{self.status[0]:.2f} C, QoS {self.status[2]}" if self.status else "no Status"
+        if self.args.no_status and self.record_t:
+            temp = "no Status requests"
         phase = ("recording " + _hms(now - self.record_t) + " of " + _hms(self.args.hours * 3600)
                  if self.record_t else "warm-up " + _hms(now - self.t0))
         print(f"{_iso(now)}  {phase}: {self.n_raw} raw, {self.n_missing} missing, "
@@ -401,6 +407,9 @@ def main():
     ap.add_argument("--warmup-min", type=float, default=30,
                     help="minutes from start before the record may begin (default 30)")
     ap.add_argument("--qos", type=int, default=5, help="Status QoS needed to begin (default 5)")
+    ap.add_argument("--no-status", action="store_true",
+                    help="stop the 1 Hz Status requests at the record start"
+                         " (no temperature in the recorded part)")
     ap.add_argument("--qos-timeout", type=float, default=15,
                     help="minutes after the warm-up to begin without that QoS (default 15)")
     ap.add_argument("--hours", type=float, default=12,

@@ -19,7 +19,8 @@ which external/INSLIB/tools/allan_variance.py reads directly.
   --max-fill-ms. A longer gap, a backward step or a timestamp restart (power
   cycle) ends the segment. With one segment the output is <out>/imu.csv;
   with several, each goes to <out>/segNN/imu.csv and the longest is named.
-- Temperature is the last Status reply before each sample (1 Hz).
+- Temperature is the last Status reply before each sample (1 Hz), or NaN
+  throughout for a log made with --no-status.
 - --average N writes the mean of each N samples (8 gives 100 Hz). A 12 h
   record at 800 Hz is about 35 M rows, 3.5 GB of CSV, which allan_variance.py
   loads with np.loadtxt; block means leave the Allan deviation unchanged at
@@ -137,6 +138,9 @@ def convert(args):
     w = Writer(out, args.average, args.min_minutes * 60)
     parser = ep.Parser()
     temp = float("nan")
+    # Logged with --no-status: the recorded part has no Status replies, so
+    # write NaN rather than repeat the last warm-up temperature.
+    no_status = bool(meta.get("no_status"))
     prev = None         # (t_us, values)
     last_raw_ts = None
     t_us = 0
@@ -154,7 +158,8 @@ def convert(args):
             done += len(data)
             for cmd, _, p in parser.feed(data):
                 if cmd == ep.CMD_STATUS and len(p) >= ep.STATUS_LEN:
-                    temp = ep.parse_status(p)[0]
+                    if not no_status:
+                        temp = ep.parse_status(p)[0]
                     continue
                 if cmd != ep.CMD_RAW or len(p) != ep.RAW_LEN:
                     continue
