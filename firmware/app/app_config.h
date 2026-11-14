@@ -19,12 +19,15 @@
 #define APP_GNSS_LEVERARM_Y_M       0.0f
 #define APP_GNSS_LEVERARM_Z_M       0.0f
 
-/* IMU noise, start values from the datasheet (plans/imu-tm210.md,
- * "INSLIB noise parameters"). Replace with Allan variance results. */
-#define APP_ACC_PSD                 3.5e-6f   /* (m/s^2)^2/Hz */
-#define APP_GYR_PSD                 1.5e-8f   /* (rad/s)^2/Hz */
-#define APP_GYR_BIAS_RW             5.0e-6f   /* rad/s/sqrt(s) */
-#define APP_ACC_BIAS_RW             3.0e-4f   /* m/s^2/sqrt(s) */
+/* IMU noise from the TM210 Allan variance run of 2026-11-13/14 (12 h static
+ * on the bench, 9.4 h analysed; plans/imu-tm210.md, "INSLIB noise
+ * parameters"). Bench values at 21.7-24.6 degC: the gyro bias random walk is
+ * only an upper bound (not resolved in 12 h), and outdoor temperature swings
+ * may need the two bias random walks raised. */
+#define APP_ACC_PSD                 2.1e-6f   /* (m/s^2)^2/Hz */
+#define APP_GYR_PSD                 1.0e-7f   /* (rad/s)^2/Hz */
+#define APP_GYR_BIAS_RW             7.0e-7f   /* rad/s/sqrt(s) */
+#define APP_ACC_BIAS_RW             3.0e-5f   /* m/s^2/sqrt(s) */
 
 /* 0 = INSLIB default (2 m/s). Below this speed the GNSS course is not used
  * for yaw (plans/inslib-nav-suite.md). */

@@ -79,13 +79,33 @@ Do the sign/unit conversion in the parser so all later data is plain FRD SI. Put
 Magnetometer: the TM210 samples it at 75 Hz but repeats it in every 800 Hz packet. Set `mag.is_valid` only when the value changes. It is fed to INSLIB from boot (user decision 2026-11-13, `APP_FEED_MAG` in `firmware/app/app_config.h`): the AHRS and the INS both use it, INSLIB applies its own World Magnetic Model for the declination, and the INS estimates the hard-iron bias. The on-vehicle calibration (step 4 below) refines it later ([inslib-nav-suite.md](inslib-nav-suite.md), "Magnetometer").
 
 ## INSLIB noise parameters
-Start values from the datasheet, to be replaced by Allan variance results:
-| Parameter | Start value | Derivation |
-|---|---|---|
-| `acc.Qll_diag` (PSD) | 3.5e-6 (m/s²)²/Hz | (190 µg/√Hz × 9.81)² |
-| `gyr.Qll_diag` (PSD) | 1.5e-8 (rad/s)²/Hz | 0.2–0.35 °/s p-p at 100 Hz → σ ≈ 0.05 °/s over 50 Hz → ~1.2e-4 rad/s/√Hz |
-| `gyr_bias_pred_stddev_rps_sqrts` | 2e-6 to 1e-5 rad/s/√s | `config_basic.yaml` value, raised for outdoor temperature swing |
-| `acc_bias_pred_stddev_mps2_sqrts` | 3e-4 m/s²/√s | `config_basic.yaml` value |
+The firmware defaults (`APP_*_PSD`, `APP_*_BIAS_RW` in `firmware/app/app_config.h`) are the measured values from our own Allan run below. Settings saved from the web page are kept in flash and override them.
+
+| Parameter | Measured (in use) | Datasheet start value | Start value derivation |
+|---|---|---|---|
+| `acc.Qll_diag` (PSD) | **2.1e-6** (m/s²)²/Hz | 3.5e-6 | (190 µg/√Hz × 9.81)² |
+| `gyr.Qll_diag` (PSD) | **1.0e-7** (rad/s)²/Hz | 1.5e-8 | 0.2–0.35 °/s p-p at 100 Hz → σ ≈ 0.05 °/s over 50 Hz → ~1.2e-4 rad/s/√Hz |
+| `gyr_bias_pred_stddev_rps_sqrts` | **7e-7** rad/s/√s, upper bound | 5e-6 (2e-6 to 1e-5) | `config_basic.yaml` value, raised for outdoor temperature swing |
+| `acc_bias_pred_stddev_mps2_sqrts` | **3e-5** m/s²/√s | 3e-4 | `config_basic.yaml` value |
+
+### Allan variance result (TM210, node ID 925, 2026-11-13/14)
+- **Run:** static on the bench, logged over USB on dietpi with `tm210_allan_log.py` (below): 30 min warm-up, then 12 h from 22:50 to 10:50, QoS 5 throughout. 36.1 M raw packets, 14,041 missing (0.04 %) in about 50 bursts of up to 0.8 s in the recorded part, 1 CRC error, no reconnects. Converted with `tm210_to_imu_csv.py --average 8 --max-fill-ms 2000` into one 12.03 h segment at 100 Hz (10,606 samples, 0.03 %, interpolated). With the default 200 ms fill limit the record split into hour-long segments, too short for the bias random walk.
+- **Disturbances:** the IMU temperature rose from 23.3 to 24.5 °C in the first 1.3 h, then fell slowly to 21.8 °C by morning. The x accelerometer bias settled by about 25 mm/s² over the first 2–3 h. A knock at 10:18 (11.46 h in; accelerometer spikes of 2 m/s²) shifted the x accelerometer by about 10 mm/s² for the rest of the run. Apart from that, only 11 samples lie above 6σ. The "possible motion" warnings (272) are noise peaks just above the tool's 1 °/s threshold.
+- **Analysis:** `allan_variance.py --skip-start 7200 --skip-end 2100`, 9.4 h. The full 12 h gives the same white noise and gyro values, but an accelerometer bias random walk twice as high (6e-5), driven by the settling and the knock.
+
+| | x | y | z |
+|---|---|---|---|
+| Gyro noise density, rad/s/√Hz (ARW) | 3.4e-4 (1.2 °/√h) | 4.0e-4 (1.4 °/√h) | 1.9e-4 (0.64 °/√h) |
+| Gyro bias instability, upper bound | ≤ 2.2 °/h | ≤ 7.0 °/h | ≤ 2.4 °/h |
+| Gyro bias random walk, upper bound | ≤ 2.2e-7 rad/s/√s | ≤ 6.8e-7 | ≤ 2.3e-7 |
+| Accel noise density | 1.4e-3 m/s²/√Hz (143 µg/√Hz) | 1.4e-3 | 1.5e-3 |
+| Accel bias instability | 0.37 mm/s² (0.037 mg) at 210 s | 0.58 mm/s² at 264 s | 0.37 mm/s² at 420 s |
+| Accel bias random walk | 2.0e-5 m/s²/√s | 2.5e-5 | 1.7e-5 |
+
+- **Gyro:** the noise is about 7× the datasheet start value as a PSD (2.6× as a density), with x and y about twice z. The pattern matches the TM171 comparison below, at about 1.5× its level. The Allan curve still falls at the longest trusted averaging time (about 3,400 s); `allan_variance.py` puts the +1/2 branch near 5,400 s, which needs about 45 h of static data. So the bias instability and bias random walk are upper bounds, and the gyro bias is more stable than this record shows.
+- **Accelerometer:** the noise density is 25 % below the datasheet's 190 µg/√Hz, and the bias instability matches its 0.05 mg.
+- **Bump near τ = 1–2 s** on the x and y gyro curves: a periodic component of a few seconds' period. Its cause isn't known; the logger's 1 Hz Status request is one candidate. A short log without Status requests would tell.
+- **Not covered:** temperature. The run spans 21.7–24.6 °C indoors, so field use may need the two bias random walks raised. The TM171 was not logged.
 
 **A measured comparison (TM171, not our TM210).** The AgOpenWeb-HAT evaluation (same document, §8.4) ran a 2 h Allan test on a TM171 on 2026-11-06, at 24–26 °C:
 
@@ -105,9 +125,9 @@ So the x and y gyro noise may be about 2× the datasheet-derived figure, and the
    - **QoS:** the user guide's "Step 2 – Heat Up" keeps the module still for about 5 min until QoS reaches 5, and calls that "extremely important". Start the log only once QoS is 5 and the 30 min warm-up is over, and log QoS beside the temperature.
    - **Gaps:** over USB whole packets go missing (bench results below). Use the TM210 timestamps and split the log at gaps, or fill single missing samples.
    - **Size:** 40 B × 800 Hz ≈ 115 MB/h of raw payload, about 141 MB/h of whole packets as logged.
-   - **Tools** (`firmware/tools/`, tested 2026-11-13 against a simulated TM210 on a pty on dietpi, not yet on a real IMU):
+   - **Tools** (`firmware/tools/`, tested against a simulated TM210 on dietpi, then used for the 12 h run above):
      - `tm210_allan_log.py --port <usb port> --out <new dir>`: reads the Setting object and, if needed, writes the logging target to RAM only (raw only, 800 Hz, USB on; every other field copied). It then logs every received byte to `raw.bin` (fsync every 10 s) and Status (temperature, QoS) at 1 Hz to `status.csv`. It marks the record start in `meta.json` once the warm-up (`--warmup-min`, default 30) is over and QoS ≥ 5, and stops `--hours` (default 12) later. If the port drops out it reopens it and writes the target again. Uses pyserial if installed, otherwise termios. Run one instance per IMU.
-     - `tm210_to_imu_csv.py <dir>`: converts to INSLIB's `imu.csv` (FRD SI plus temperature) from the record start. Timestamps are unwrapped. Gaps up to `--max-fill-ms` (200) are interpolated, because `allan_variance.py` assumes a uniform period. A longer gap or a restart starts a new segment. `--average 8` writes 100 Hz block means, so a 12 h file is about 440 MB of CSV instead of 3.5 GB; the Allan deviation for τ ≥ 10 ms is unchanged.
+     - `tm210_to_imu_csv.py <dir>`: converts to INSLIB's `imu.csv` (FRD SI plus temperature) from the record start. Timestamps are unwrapped. Gaps up to `--max-fill-ms` (default 200; use 2000 for an overnight USB log) are interpolated, because `allan_variance.py` assumes a uniform period. A longer gap or a restart starts a new segment. `--average 8` writes 100 Hz block means, so a 12 h file is about 440 MB of CSV instead of 3.5 GB; the Allan deviation for τ ≥ 10 ms is unchanged.
    - **Host:** miniPi lost 684 packets in 10 min over USB, the PC 1 (bench results below). Prefer the PC or dietpi.
 2. **6-position static test** (each axis up and down, ~30 s each) → `external/INSLIB/tools/inslib_imu_calib.py` → accelerometer scale and fixed bias, gyro fixed bias, into `imu_acc_misalignment` / `imu_*_fixed_bias`. This also fixes the "units, not absolute" accelerometer magnitude.
 3. **Mount angles** on the vehicle: `external/INSLIB/tools/inslib_frame_align.py` or measure, set `mount_rpy_deg`.
